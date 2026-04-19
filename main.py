@@ -25,7 +25,7 @@ finally:
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[app_settings.FRONTEND_URL],
+    allow_origins=["http://localhost:3000", "https://oron-marketplace.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
