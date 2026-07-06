@@ -40,6 +40,11 @@ class User(UserInDB):
     pass
 
 
+class UserWithStats(User):
+    total_orders: int = 0
+    total_spent: float = 0.0
+
+
 # Authentication schemas
 class Token(BaseModel):
     access_token: str
@@ -100,6 +105,10 @@ class CategoryUpdate(BaseSchema):
 class Category(CategoryBase):
     id: str
     created_at: datetime
+
+
+class CategoryWithCount(Category):
+    product_count: int = 0
 
 
 # Product schemas
@@ -173,6 +182,10 @@ class Order(OrderBase):
     items: List[OrderItem]
     shipping_info: Optional["OrderShippingInfo"] = None
     shipments: List["Shipment"] = []
+
+
+class OrderWithUser(Order):
+    user: Optional[User] = None
 
 
 # Query parameters
@@ -283,6 +296,11 @@ class Dispute(DisputeBase):
     resolution_note: str = ""
     created_at: datetime
     updated_at: Optional[datetime] = None
+
+
+class DisputeWithDetails(Dispute):
+    user: Optional[User] = None
+    order: Optional[Order] = None
 
 
 # Addresses

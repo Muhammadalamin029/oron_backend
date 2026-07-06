@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routes import auth, products, orders, categories, notifications, favourites, payments, settings, reviews, disputes, addresses, shipments, support
+from routes import auth, products, orders, categories, notifications, favourites, payments, settings, reviews, disputes, addresses, shipments, support, admin
 from database.database import engine, SessionLocal
 from models import Base
 from utils.bootstrapping import preseed_settings, preseed_admin
@@ -45,6 +45,7 @@ app.include_router(disputes.router)
 app.include_router(addresses.router)
 app.include_router(shipments.router)
 app.include_router(support.router)
+app.include_router(admin.router)
 
 @app.get("/")
 async def root():

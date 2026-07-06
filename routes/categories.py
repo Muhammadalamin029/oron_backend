@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 
-from schemas import CategoryCreate, CategoryUpdate, Category
+from schemas import CategoryCreate, CategoryUpdate, Category, CategoryWithCount
 from services import categories as categories_service
 from database.dependencies import get_db, get_admin_user
 
@@ -11,6 +11,10 @@ router = APIRouter(prefix="/categories", tags=["categories"])
 @router.get("/", response_model=List[Category])
 async def get_categories(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     return categories_service.get_categories(db, skip=skip, limit=limit)
+
+@router.get("/with-stats", response_model=List[CategoryWithCount])
+async def get_categories_with_stats(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    return categories_service.get_categories_with_product_count(db, skip=skip, limit=limit)
 
 @router.post("/", response_model=Category)
 async def create_category(category_data: CategoryCreate, db: Session = Depends(get_db), current_admin = Depends(get_admin_user)):

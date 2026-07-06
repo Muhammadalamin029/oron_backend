@@ -1,5 +1,6 @@
 import uuid
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from fastapi import HTTPException
 import models
 import schemas
@@ -9,7 +10,19 @@ def get_category(db: Session, category_id: str):
     return db.query(models.Category).filter(models.Category.id == category_id).first()
 
 def get_categories(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Category).offset(skip).limit(limit).all()
+    return db.query(models.Category).order_by(models.Category.name).offset(skip).limit(limit).all()
+
+def get_categories_with_product_count(db: Session, skip: int = 0, limit: int = 100):
+    results = db.query(
+        models.Category,
+        func.count(models.Product.id).label("product_count")
+    ).outerjoin(models.Product).group_by(models.Category.id).order_by(models.Category.name).offset(skip).limit(limit).all()
+    
+    categories = []
+    for cat, count in results:
+        cat.product_count = count
+        categories.append(cat)
+    return categories
 
 def create_category(db: Session, category: schemas.CategoryCreate, admin_user_id: str = None):
     db_category = models.Category(
