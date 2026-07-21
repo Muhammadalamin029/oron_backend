@@ -24,6 +24,8 @@ class Settings:
     
     # Payments
     PAYSTACK_SECRET_KEY: str = os.getenv("PAYSTACK_SECRET_KEY", "sk_test_placeholder")
+    PAYSTACK_PUBLIC_KEY: str = os.getenv("PAYSTACK_PUBLIC_KEY", "")
+    PAYSTACK_CHARGE_EXPIRY_MINUTES: int = int(os.getenv("PAYSTACK_CHARGE_EXPIRY_MINUTES", "30"))
 
     # Optional bootstrap admin (dev/prod first admin)
     INITIAL_ADMIN_EMAIL: str = os.getenv("INITIAL_ADMIN_EMAIL", "")

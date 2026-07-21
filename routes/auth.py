@@ -3,7 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import List
 
-from schemas import UserCreate, AuthResponse, User, RefreshTokenRequest, UserUpdate, ResendVerificationRequest
+from schemas import UserCreate, AuthResponse, User, RefreshTokenRequest, UserUpdate, ResendVerificationRequest, SetPasswordRequest, SetPasswordResponse
 from services import auth as auth_service
 from database.dependencies import get_db, get_current_active_user, get_admin_user
 from core.security import create_access_token, create_refresh_token
@@ -35,6 +35,23 @@ async def register(
 @router.get("/verify-email")
 async def verify_email(token: str, db: Session = Depends(get_db)):
     return auth_service.verify_email(db, token)
+
+@router.post("/set-password", response_model=SetPasswordResponse)
+async def set_password(
+    data: SetPasswordRequest,
+    db: Session = Depends(get_db),
+    _: None = Depends(rate_limiter.limit(key="auth.set_password", max_requests=10, window_seconds=300)),
+):
+    user, order_id = auth_service.set_password(db, data.token, data.password)
+    access_token = create_access_token(data={"sub": user.email})
+    refresh_token = create_refresh_token(data={"sub": user.email})
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "user": user,
+        "order_id": order_id,
+    }
 
 @router.post("/resend-verification")
 async def resend_verification(

@@ -6,7 +6,7 @@ import schemas
 from core.security import verify_password, get_password_hash
 from core.config import settings
 from jose import jwt, JWTError
-from core.security import create_access_token, create_verification_token
+from core.security import create_access_token, create_verification_token, create_set_password_token
 from core.email import send_verification_email
 from services.audit import log_user_activity, log_security_event
 from datetime import timedelta
@@ -123,6 +123,86 @@ def authenticate_user(db: Session, email: str, password: str):
     user = get_user_by_email(db, email)
     if not user:
         return False
-    if not verify_password(password, user.hashed_password):
+    if not user.hashed_password or not verify_password(password, user.hashed_password):
         return False
     return user
+
+
+def find_or_create_guest_account(db: Session, email: str, full_name: str) -> models.User:
+    """
+    Used by guest checkout. Returns an existing not-yet-completed guest account to
+    reuse (an abandoned prior guest checkout), or creates a brand-new one with no
+    password. Raises 409 if the email already belongs to a fully set-up account,
+    since guest checkout must never silently attach an order to someone else's
+    account by email match alone.
+    """
+    existing = get_user_by_email(db, email)
+    if existing:
+        if existing.is_verified and existing.hashed_password:
+            raise HTTPException(
+                status_code=409,
+                detail="An account with this email already exists. Please log in to continue.",
+            )
+        if full_name:
+            existing.full_name = full_name
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    user = models.User(
+        id=str(uuid.uuid4()),
+        email=email,
+        full_name=full_name or email,
+        hashed_password=None,
+        is_active=True,
+        is_admin=False,
+        is_verified=False,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    log_user_activity(
+        db,
+        user_id=user.id,
+        action="user.guest_created",
+        entity_type="user",
+        entity_id=user.id,
+        meta={"email": email},
+    )
+    return user
+
+
+def set_password(db: Session, token: str, new_password: str) -> tuple[models.User, str]:
+    """
+    Completes the guest-checkout combined verify-email + set-password step.
+    Returns the user and the order_id embedded in the token so the caller
+    (route) can tell the frontend where to redirect.
+    """
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        email = payload.get("sub")
+        order_id = payload.get("order_id")
+        token_type = payload.get("type")
+        if token_type != "set_password" or not email or not order_id:
+            raise HTTPException(status_code=400, detail="Invalid or expired token")
+    except JWTError:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    user = get_user_by_email(db, email)
+    if not user:
+        raise HTTPException(status_code=400, detail="User not found")
+
+    user.hashed_password = get_password_hash(new_password)
+    user.is_verified = True
+    db.commit()
+    db.refresh(user)
+
+    log_user_activity(
+        db,
+        user_id=user.id,
+        action="user.password_set",
+        entity_type="user",
+        entity_id=user.id,
+    )
+    return user, order_id

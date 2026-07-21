@@ -12,7 +12,7 @@ class User(Base):
     id = Column(String, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     full_name = Column(String, nullable=False)
-    hashed_password = Column(String, nullable=False)
+    hashed_password = Column(String, nullable=True)  # null until a guest-checkout account sets a password
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
     is_verified = Column(Boolean, default=False)
@@ -75,7 +75,7 @@ class Order(Base):
     # Relationships
     user = relationship("User", back_populates="orders")
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
-    payment = relationship("Payment", back_populates="order", uselist=False, cascade="all, delete-orphan")
+    payments = relationship("Payment", back_populates="order", cascade="all, delete-orphan", order_by="Payment.created_at.desc()")
     disputes = relationship("Dispute", back_populates="order", cascade="all, delete-orphan")
     shipments = relationship("Shipment", back_populates="order", cascade="all, delete-orphan")
     shipping_info = relationship("OrderShippingInfo", back_populates="order", uselist=False, cascade="all, delete-orphan")
@@ -123,18 +123,24 @@ class Favorite(Base):
 
 class Payment(Base):
     __tablename__ = "payments"
-    
+
     id = Column(String, primary_key=True, index=True)
     order_id = Column(String, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
     amount = Column(Float, nullable=False)
     provider = Column(String, default="paystack")
     reference = Column(String, unique=True, nullable=False)
-    status = Column(String, default="pending")  # pending, success, failed
+    status = Column(String, default="pending")  # pending, success, failed, expired
+    method = Column(String, default="bank_transfer")  # bank_transfer, redirect
+    bank_name = Column(String, nullable=True)
+    account_number = Column(String, nullable=True)
+    account_name = Column(String, nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    meta = Column(JSON, nullable=True)  # raw provider payload
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
-    order = relationship("Order", back_populates="payment")
+    order = relationship("Order", back_populates="payments")
 
 class SiteSetting(Base):
     __tablename__ = "site_settings"

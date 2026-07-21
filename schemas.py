@@ -69,6 +69,15 @@ class ResendVerificationRequest(BaseModel):
     email: EmailStr
 
 
+class SetPasswordRequest(BaseModel):
+    token: str
+    password: str
+
+
+class SetPasswordResponse(AuthResponse):
+    order_id: str
+
+
 # Notification schemas
 class NotificationBase(BaseSchema):
     title: str
@@ -170,6 +179,17 @@ class OrderCreate(BaseSchema):
     items: List[OrderItemCreate]
 
 
+class GuestCheckoutRequest(BaseSchema):
+    items: List[OrderItemCreate]
+    shipping: "OrderShippingInfoCreate"
+
+
+class GuestCheckoutResponse(BaseModel):
+    order_id: str
+    email: EmailStr
+    message: str = "Check your email to verify your account and set a password."
+
+
 class OrderUpdate(BaseSchema):
     status: Optional[str] = None
 
@@ -219,19 +239,46 @@ class Favorite(FavoriteBase):
 
 
 # Payment schemas
-class PaymentInitialize(BaseModel):
-    order_id: str
-
 class PaymentBase(BaseSchema):
     amount: float
     provider: str
     reference: str
     status: str
+    method: str = "bank_transfer"
+    bank_name: Optional[str] = None
+    account_number: Optional[str] = None
+    account_name: Optional[str] = None
+    expires_at: Optional[datetime] = None
 
 class Payment(PaymentBase):
     id: str
     order_id: str
     created_at: datetime
+
+
+class ChargeInitiateResponse(BaseModel):
+    payment_id: str
+    order_id: str
+    reference: str
+    status: str
+    amount: float
+    bank_name: Optional[str] = None
+    account_number: Optional[str] = None
+    account_name: Optional[str] = None
+    expires_at: Optional[datetime] = None
+
+
+class PaymentStatusResponse(BaseModel):
+    order_id: str
+    payment_id: Optional[str] = None
+    payment_status: str
+    order_status: str
+    amount: Optional[float] = None
+    bank_name: Optional[str] = None
+    account_number: Optional[str] = None
+    account_name: Optional[str] = None
+    expires_at: Optional[datetime] = None
+    seconds_remaining: Optional[int] = None
 
 # Site Settings schemas
 class SiteSettingBase(BaseSchema):
@@ -436,3 +483,4 @@ class AdminAuditLog(BaseSchema):
 
 # Resolve forward references
 Order.model_rebuild()
+GuestCheckoutRequest.model_rebuild()

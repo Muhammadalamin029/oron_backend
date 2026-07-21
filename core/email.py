@@ -82,6 +82,71 @@ def send_verification_email(to_email: str, token: str):
     )
     send_email(to_email, "Welcome to ORON! Please verify your email.", html_template)
 
+def send_verify_and_set_password_email(to_email: str, token: str):
+    set_password_url = f"{settings.FRONTEND_URL}/auth/set-password?token={token}"
+    content = f"""
+        <p>Welcome to ORON Watch Marketplace!</p>
+        <p>We've received your order and are holding it for you. You're one step from tracking it: verify your email and set a password to access your order.</p>
+        <div style="text-align: center;">
+            <a href="{set_password_url}" class="button">Set My Password</a>
+        </div>
+        <p style="margin-top: 32px; font-size: 14px; color: #71717a;">
+            Or copy and paste this link into your browser:<br>
+            <a href="{set_password_url}" style="color: #3b82f6;">{set_password_url}</a>
+        </p>
+    """
+    html_template = get_base_html_template(
+        title="Verify Your Email & Set a Password",
+        preheader="You're one step from tracking your ORON order.",
+        content=content
+    )
+    send_email(to_email, "Welcome to ORON! Set a password to continue your order.", html_template)
+
+
+def send_bank_transfer_details_email(to_email: str, order_id: str, bank_name: str, account_number: str, account_name: str, amount: float, expires_at):
+    order_ref = order_id[-6:]
+    expires_str = expires_at.strftime("%d %b %Y, %I:%M %p %Z") if expires_at else "shortly"
+    amount_str = f"₦{amount:,.2f}"
+    order_url = f"{settings.FRONTEND_URL}/orders/{order_id}"
+    content = f"""
+        <p>Complete your payment for order #{order_ref} by making a bank transfer for the exact amount below to the dedicated account number provided.</p>
+        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <p><strong>Bank:</strong> {bank_name or 'N/A'}</p>
+            <p><strong>Account Number:</strong> {account_number or 'N/A'}</p>
+            <p><strong>Account Name:</strong> {account_name or 'N/A'}</p>
+            <p><strong>Amount:</strong> {amount_str}</p>
+        </div>
+        <p>This account number is valid until <strong>{expires_str}</strong>. Transfer the exact amount shown — your order will be marked paid automatically once we receive it.</p>
+        <div style="text-align: center;">
+            <a href="{order_url}" class="button">View Order</a>
+        </div>
+    """
+    html_template = get_base_html_template(
+        title="Complete Your Payment via Bank Transfer",
+        preheader=f"Your dedicated account details for order #{order_ref}",
+        content=content
+    )
+    send_email(to_email, "Complete Your Payment via Bank Transfer", html_template)
+
+
+def send_bank_transfer_expired_email(to_email: str, order_id: str):
+    order_ref = order_id[-6:]
+    order_url = f"{settings.FRONTEND_URL}/orders/{order_id}"
+    content = f"""
+        <p>Your payment window for order #{order_ref} has expired without payment. No charge was made to any account.</p>
+        <p>You can generate a new account number and complete your purchase at any time.</p>
+        <div style="text-align: center;">
+            <a href="{order_url}" class="button">Generate New Account Number</a>
+        </div>
+    """
+    html_template = get_base_html_template(
+        title="Payment Window Expired",
+        preheader=f"Your payment window for order #{order_ref} has expired.",
+        content=content
+    )
+    send_email(to_email, f"Payment Window Expired: Order #{order_ref}", html_template)
+
+
 def send_notification_email(to_email: str, title: str, message: str):
     content = f"<p>{message}</p>"
     html_template = get_base_html_template(

@@ -1,10 +1,11 @@
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from fastapi import HTTPException
+from fastapi import HTTPException, BackgroundTasks
 
 import models
 import schemas
+from services.notifications import create_notification
 
 
 def get_order_shipments(db: Session, order_id: str):
@@ -16,7 +17,7 @@ def get_order_shipments(db: Session, order_id: str):
     )
 
 
-def create_shipment(db: Session, data: schemas.ShipmentCreate):
+def create_shipment(db: Session, data: schemas.ShipmentCreate, background_tasks: BackgroundTasks = None):
     order = db.query(models.Order).filter(models.Order.id == data.order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -33,10 +34,19 @@ def create_shipment(db: Session, data: schemas.ShipmentCreate):
     db.add(shipment)
     db.commit()
     db.refresh(shipment)
+
+    notif_data = schemas.NotificationCreate(
+        user_id=order.user_id,
+        title=f"Shipment Created: Order #{order.id[-6:]}",
+        message=f"Your order has shipped via {shipment.carrier or 'our carrier'}. Tracking: {shipment.tracking_number or 'N/A'}.",
+        type="order",
+    )
+    create_notification(db, notif_data, background_tasks)
+
     return shipment
 
 
-def update_shipment(db: Session, shipment_id: str, data: schemas.ShipmentUpdate):
+def update_shipment(db: Session, shipment_id: str, data: schemas.ShipmentUpdate, background_tasks: BackgroundTasks = None):
     shipment = db.query(models.Shipment).filter(models.Shipment.id == shipment_id).first()
     if not shipment:
         raise HTTPException(status_code=404, detail="Shipment not found")
@@ -47,5 +57,17 @@ def update_shipment(db: Session, shipment_id: str, data: schemas.ShipmentUpdate)
 
     db.commit()
     db.refresh(shipment)
+
+    if "status" in update_data:
+        order = db.query(models.Order).filter(models.Order.id == shipment.order_id).first()
+        if order:
+            notif_data = schemas.NotificationCreate(
+                user_id=order.user_id,
+                title=f"Shipment Update: Order #{order.id[-6:]}",
+                message=f"Your shipment status is now: {shipment.status}.",
+                type="order",
+            )
+            create_notification(db, notif_data, background_tasks)
+
     return shipment
 

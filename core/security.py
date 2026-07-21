@@ -44,3 +44,10 @@ def create_verification_token(data: dict[str, Any], expires_delta: Optional[time
         expires_delta = timedelta(hours=24)
     return _create_token(data=data, expires_delta=expires_delta, token_type="verify")
 
+
+def create_set_password_token(data: dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+    # default: 48 hours — longer than the verify-only token since this also gates completing a purchase
+    if expires_delta is None:
+        expires_delta = timedelta(hours=48)
+    return _create_token(data=data, expires_delta=expires_delta, token_type="set_password")
+

@@ -1,8 +1,11 @@
+from pathlib import Path
+
+from alembic import command
+from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routes import auth, products, orders, categories, notifications, favourites, payments, settings, reviews, disputes, addresses, shipments, support, admin
-from database.database import engine, SessionLocal
-from models import Base
+from routes import auth, products, orders, categories, notifications, favourites, payments, settings, reviews, disputes, addresses, shipments, support, admin, checkout
+from database.database import SessionLocal
 from utils.bootstrapping import preseed_settings, preseed_admin
 from core.config import settings as app_settings
 
@@ -12,7 +15,11 @@ app = FastAPI(
     version="1.0.0",
 )
 
-Base.metadata.create_all(bind=engine)
+# Schema is Alembic-owned as of the "guest checkout + bank transfer payments"
+# migration — this replaces the old Base.metadata.create_all(bind=engine),
+# which only ever created missing tables and could never alter existing ones.
+alembic_cfg = Config(str(Path(__file__).parent / "alembic.ini"))
+command.upgrade(alembic_cfg, "head")
 
 # Pre-seed site settings
 db = SessionLocal()
@@ -46,6 +53,7 @@ app.include_router(addresses.router)
 app.include_router(shipments.router)
 app.include_router(support.router)
 app.include_router(admin.router)
+app.include_router(checkout.router)
 
 @app.get("/")
 async def root():

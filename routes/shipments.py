@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -30,10 +30,11 @@ async def get_order_shipments(
 @router.post("/", response_model=schemas.Shipment)
 async def create_shipment(
     data: schemas.ShipmentCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_admin_user),
 ):
-    shipment = shipments_service.create_shipment(db, data)
+    shipment = shipments_service.create_shipment(db, data, background_tasks)
     log_admin_action(
         db,
         admin_user_id=current_admin.id,
@@ -49,10 +50,11 @@ async def create_shipment(
 async def update_shipment(
     shipment_id: str,
     data: schemas.ShipmentUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_admin: models.User = Depends(get_admin_user),
 ):
-    shipment = shipments_service.update_shipment(db, shipment_id, data)
+    shipment = shipments_service.update_shipment(db, shipment_id, data, background_tasks)
     log_admin_action(
         db,
         admin_user_id=current_admin.id,

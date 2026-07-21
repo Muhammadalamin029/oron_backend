@@ -119,13 +119,14 @@ def create_order(db: Session, order: schemas.OrderCreate, user_id: str, backgrou
             )
             db.add(db_item)
         db_order.total_amount = total_amount
+        db_order.status = "unpaid"
         db.commit()
         db.refresh(db_order)
-    
+
     notif_data = schemas.NotificationCreate(
         user_id=user_id,
-        title="Cart Updated",
-        message=f"Cart updated. Total amount: ${db_order.total_amount:,.2f}",
+        title="Order Placed",
+        message=f"Your order is awaiting payment. Total amount: NGN {db_order.total_amount:,.2f}",
         type="order"
     )
     create_notification(db, notif_data, background_tasks)

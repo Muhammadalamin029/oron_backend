@@ -5,25 +5,27 @@ from typing import List
 import models
 import schemas
 from services import payments as payments_service
-from database.dependencies import get_db, get_current_verified_user, get_current_active_user, get_admin_user
+from database.dependencies import get_db, get_current_verified_user, get_admin_user
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
-@router.post("/initialize")
-async def initialize_payment(
-    data: schemas.PaymentInitialize, 
-    db: Session = Depends(get_db), 
+@router.post("/orders/{order_id}/charge", response_model=schemas.ChargeInitiateResponse)
+async def initiate_charge(
+    order_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_verified_user)
 ):
-    return await payments_service.initialize_payment(db, data.order_id, current_user.id, current_user.email)
+    return await payments_service.initiate_bank_transfer_charge(db, order_id, current_user.id, current_user.email, background_tasks)
 
-@router.get("/verify/{reference}")
-async def verify_payment(
-    reference: str,
+@router.get("/orders/{order_id}/status", response_model=schemas.PaymentStatusResponse)
+async def payment_status(
+    order_id: str,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_active_user)
+    current_user: models.User = Depends(get_current_verified_user)
 ):
-    return await payments_service.verify_payment(db, reference, current_user.id)
+    return payments_service.get_payment_status(db, order_id, current_user.id, background_tasks)
 
 @router.get("/my-payments", response_model=List[schemas.Payment])
 async def get_user_payments(
@@ -60,6 +62,6 @@ async def paystack_webhook(
 ):
     if not x_paystack_signature:
         raise HTTPException(status_code=400, detail="Missing signature header")
-        
+
     payload_bytes = await request.body()
     return await payments_service.handle_webhook(db, x_paystack_signature, payload_bytes, background_tasks)
