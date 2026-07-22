@@ -5,7 +5,7 @@ from fastapi import HTTPException, BackgroundTasks
 import models
 import schemas
 from core.email import send_support_ticket_email, send_support_reply_email
-from core.config import settings
+from services.notifications import create_admin_notification, get_admin_emails
 
 
 def create_ticket(db: Session, current_user: models.User, data: schemas.SupportTicketCreate, background_tasks: BackgroundTasks = None):
@@ -28,7 +28,17 @@ def create_ticket(db: Session, current_user: models.User, data: schemas.SupportT
     )
     db.add(msg)
     db.commit()
-    
+
+    # In-app admin notification (email is sent separately below via a
+    # purpose-built template, so we deliberately skip the generic email
+    # here to avoid sending admins two emails for one ticket).
+    create_admin_notification(
+        db,
+        title=f"New Support Ticket: {ticket.subject}",
+        message=f"{current_user.full_name} opened ticket #{ticket.id[-6:]}: {data.message[:140]}",
+        notification_type="support",
+    )
+
     # Send email notifications
     if background_tasks:
         # Send confirmation to user
@@ -41,16 +51,16 @@ def create_ticket(db: Session, current_user: models.User, data: schemas.SupportT
             is_admin=False
         )
         
-        # Send notification to admin
-        admin_email = settings.EMAILS_FROM_EMAIL  # or a dedicated admin email
-        background_tasks.add_task(
-            send_support_ticket_email,
-            admin_email,
-            ticket.id,
-            data.subject,
-            data.message,
-            is_admin=True
-        )
+        # Send notification to every real admin
+        for admin_email in get_admin_emails(db):
+            background_tasks.add_task(
+                send_support_ticket_email,
+                admin_email,
+                ticket.id,
+                data.subject,
+                data.message,
+                is_admin=True
+            )
     
     return get_ticket(db, ticket.id, current_user.id, is_admin=False)
 
@@ -119,17 +129,17 @@ def add_message(db: Session, ticket_id: str, sender: str, message: str, backgrou
                 is_admin=False
             )
         elif sender == "user":
-            # Send notification to admin
-            admin_email = settings.EMAILS_FROM_EMAIL
-            background_tasks.add_task(
-                send_support_reply_email,
-                admin_email,
-                ticket.id,
-                ticket.subject,
-                message,
-                sender_name or ticket.user.full_name if ticket.user else "Customer",
-                is_admin=True
-            )
+            # Send notification to every real admin
+            for admin_email in get_admin_emails(db):
+                background_tasks.add_task(
+                    send_support_reply_email,
+                    admin_email,
+                    ticket.id,
+                    ticket.subject,
+                    message,
+                    sender_name or ticket.user.full_name if ticket.user else "Customer",
+                    is_admin=True
+                )
     
     return msg
 

@@ -38,6 +38,16 @@ def mark_notification_read(db: Session, notification_id: str, user_id: str):
         db.refresh(notif)
     return notif
 
+def get_admin_emails(db: Session) -> list[str]:
+    """
+    Real registered admin users' emails — the correct recipient for any
+    admin-facing email. Not to be confused with settings.EMAILS_FROM_EMAIL,
+    which is the site's own "from" address, not an admin inbox.
+    """
+    admins = db.query(models.User).filter(models.User.is_admin == True, models.User.is_active == True).all()
+    return [a.email for a in admins]
+
+
 def create_admin_notification(db: Session, title: str, message: str, notification_type: str = "system", background_tasks: BackgroundTasks = None):
     """Create notifications for all admin users"""
     admin_users = db.query(models.User).filter(models.User.is_admin == True, models.User.is_active == True).all()

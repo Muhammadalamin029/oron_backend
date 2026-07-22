@@ -133,15 +133,50 @@ def create_order(db: Session, order: schemas.OrderCreate, user_id: str, backgrou
     
     return db_order
 
+
+# Admin-driven status flow. "paid" is reached only via the payment
+# webhook/verify path (services/payments.py) and is never admin-settable —
+# it has no predecessor in this list, so it's structurally unreachable
+# through update_order_status below.
+ORDER_STATUS_FLOW = ["paid", "processing", "shipped", "delivered"]
+CANCELLABLE_FROM_STATUSES = {"paid", "processing", "shipped"}
+TERMINAL_STATUSES = {"delivered", "cancelled"}
+PAYMENT_GATED_STATUSES = {"pending", "unpaid", "expired"}
+
+
+def get_next_status(current: str) -> str | None:
+    if current not in ORDER_STATUS_FLOW:
+        return None
+    idx = ORDER_STATUS_FLOW.index(current)
+    return ORDER_STATUS_FLOW[idx + 1] if idx + 1 < len(ORDER_STATUS_FLOW) else None
+
+
 def update_order_status(db: Session, order_id: str, status: str, background_tasks: BackgroundTasks = None):
     db_order = get_order(db, order_id)
     if not db_order:
         raise HTTPException(status_code=404, detail="Order not found")
-        
+
+    current = db_order.status
+
+    if current in PAYMENT_GATED_STATUSES:
+        raise HTTPException(status_code=400, detail="This order must be paid before its status can be updated")
+    if current in TERMINAL_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Order is already {current} and its status can no longer be changed")
+
+    if status == "cancelled":
+        if current not in CANCELLABLE_FROM_STATUSES:
+            raise HTTPException(status_code=400, detail=f"Order cannot be cancelled from status '{current}'")
+    elif status in ORDER_STATUS_FLOW:
+        expected = get_next_status(current)
+        if status != expected:
+            raise HTTPException(status_code=400, detail=f"Invalid transition: order is '{current}', next allowed status is '{expected or 'none'}'")
+    else:
+        raise HTTPException(status_code=400, detail=f"'{status}' is not a valid order status")
+
     db_order.status = status
     db.commit()
     db.refresh(db_order)
-    
+
     notif_data = schemas.NotificationCreate(
         user_id=db_order.user_id,
         title="Order Status Updated",
@@ -149,7 +184,7 @@ def update_order_status(db: Session, order_id: str, status: str, background_task
         type="order"
     )
     create_notification(db, notif_data, background_tasks)
-    
+
     return db_order
 
 def delete_order(db: Session, order_id: str):

@@ -5,7 +5,7 @@ from fastapi import HTTPException, BackgroundTasks
 import models
 import schemas
 from core.email import send_dispute_email
-from core.config import settings
+from services.notifications import trigger_dispute_notifications, get_admin_emails
 
 
 def get_my_disputes(db: Session, user_id: str):
@@ -54,7 +54,12 @@ def create_dispute(db: Session, user_id: str, data: schemas.DisputeCreate, backg
     db.add(dispute)
     db.commit()
     db.refresh(dispute)
-    
+
+    # In-app admin notification (email is sent separately below via a
+    # purpose-built template, so we deliberately skip the generic email
+    # here to avoid sending admins two emails for one dispute).
+    trigger_dispute_notifications(db, dispute, background_tasks=None)
+
     # Send email notifications
     if background_tasks:
         user = db.query(models.User).filter(models.User.id == user_id).first()
@@ -70,17 +75,17 @@ def create_dispute(db: Session, user_id: str, data: schemas.DisputeCreate, backg
                 is_admin=False
             )
             
-            # Send notification to admin
-            admin_email = settings.EMAILS_FROM_EMAIL
-            background_tasks.add_task(
-                send_dispute_email,
-                admin_email,
-                dispute.id,
-                order.id,
-                data.reason,
-                data.description or "",
-                is_admin=True
-            )
+            # Send notification to every real admin
+            for admin_email in get_admin_emails(db):
+                background_tasks.add_task(
+                    send_dispute_email,
+                    admin_email,
+                    dispute.id,
+                    order.id,
+                    data.reason,
+                    data.description or "",
+                    is_admin=True
+                )
     
     return dispute
 

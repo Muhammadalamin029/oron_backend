@@ -68,7 +68,7 @@ class Order(Base):
     id = Column(String, primary_key=True, index=True)
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     total_amount = Column(Float, nullable=False)
-    status = Column(String, default="pending")  # pending, processing, shipped, delivered, cancelled
+    status = Column(String, default="pending")  # pending, unpaid, paid, expired, processing, shipped, delivered, cancelled
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

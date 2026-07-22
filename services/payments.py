@@ -8,10 +8,9 @@ from sqlalchemy.orm import Session, joinedload
 from fastapi import HTTPException, BackgroundTasks
 
 import models
-import schemas
 from core.config import settings
 from core.email import send_bank_transfer_details_email, send_bank_transfer_expired_email
-from services.notifications import create_notification
+from services.notifications import trigger_payment_notifications
 from services.orders import get_order
 from services import shipping_info as shipping_info_service
 
@@ -211,6 +210,60 @@ def get_payment_status(db: Session, order_id: str, user_id: str, background_task
     }
 
 
+async def verify_payment_with_paystack(db: Session, order_id: str, user_id: str, background_tasks: BackgroundTasks):
+    """
+    Customer-triggered ("I have sent the money") manual re-check. Always makes
+    a real call to Paystack's transaction-verify API when a key is configured
+    (test or live) rather than reflecting only whatever the webhook has told
+    us so far — the webhook path can be delayed or missed. The only case that
+    skips the call is the true "no key at all" placeholder sentinel.
+    """
+    order = get_order(db, order_id)
+    if not order or order.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    payment = (
+        db.query(models.Payment)
+        .filter(models.Payment.order_id == order_id)
+        .order_by(models.Payment.created_at.desc())
+        .first()
+    )
+    if not payment:
+        raise HTTPException(status_code=404, detail="No payment initiated for this order")
+
+    if payment.status == "pending" and settings.PAYSTACK_SECRET_KEY != "sk_test_placeholder":
+        url = f"https://api.paystack.co/transaction/verify/{payment.reference}"
+        headers = {"Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}"}
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, headers=headers)
+
+        if response.status_code == 200:
+            data = (response.json() or {}).get("data") or {}
+            paystack_status = data.get("status")
+
+            if paystack_status == "success":
+                payment.status = "success"
+                db.commit()
+                db.refresh(payment)
+                _finalize_successful_payment(db, order)
+                db.commit()
+                db.refresh(order)
+                trigger_payment_notifications(db, payment, background_tasks)
+            elif paystack_status in ("failed", "abandoned"):
+                # Leave order.status untouched (stays "unpaid") — only
+                # payment.status reflects this attempt failed. The
+                # order-details page's retry-charge logic keys off
+                # order.status, so this can't spawn a duplicate charge.
+                payment.status = "failed"
+                db.commit()
+                db.refresh(payment)
+            # Any other value (e.g. still "pending"/"processing" on
+            # Paystack's side) is genuinely inconclusive — leave as-is.
+
+    return get_payment_status(db, order_id, user_id, background_tasks)
+
+
 async def handle_webhook(db: Session, signature: str, payload_bytes: bytes, background_tasks: BackgroundTasks):
     expected_sign = hmac.new(
         settings.PAYSTACK_SECRET_KEY.encode('utf-8'),
@@ -241,15 +294,9 @@ async def handle_webhook(db: Session, signature: str, payload_bytes: bytes, back
             if order:
                 _finalize_successful_payment(db, order)
 
-                notif_data = schemas.NotificationCreate(
-                    user_id=order.user_id,
-                    title="Payment Successful!",
-                    message=f"Your payment for order #{order.id[-6:]} was completely successful. We are now processing your items.",
-                    type="payment"
-                )
-                create_notification(db, notif_data, background_tasks)
-
             db.commit()
+            db.refresh(payment)
+            trigger_payment_notifications(db, payment, background_tasks)
 
     return {"status": "ok"}
 

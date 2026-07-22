@@ -1,4 +1,5 @@
-from pydantic import BaseModel, EmailStr
+import re
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, List
 from datetime import datetime
 
@@ -7,6 +8,19 @@ from datetime import datetime
 class BaseSchema(BaseModel):
     class Config:
         from_attributes = True
+
+
+PASSWORD_MIN_LENGTH = 8
+
+
+def validate_password_strength(value: str) -> str:
+    if len(value) < PASSWORD_MIN_LENGTH:
+        raise ValueError(f"Password must be at least {PASSWORD_MIN_LENGTH} characters long")
+    if not re.search(r"[A-Za-z]", value):
+        raise ValueError("Password must contain at least one letter")
+    if not re.search(r"[0-9]", value):
+        raise ValueError("Password must contain at least one digit")
+    return value
 
 
 # User schemas
@@ -20,6 +34,11 @@ class UserBase(BaseSchema):
 
 class UserCreate(UserBase):
     password: str
+
+    @field_validator("password")
+    @classmethod
+    def _password_strength(cls, v: str) -> str:
+        return validate_password_strength(v)
 
 
 class UserUpdate(BaseSchema):
@@ -72,6 +91,11 @@ class ResendVerificationRequest(BaseModel):
 class SetPasswordRequest(BaseModel):
     token: str
     password: str
+
+    @field_validator("password")
+    @classmethod
+    def _password_strength(cls, v: str) -> str:
+        return validate_password_strength(v)
 
 
 class SetPasswordResponse(AuthResponse):

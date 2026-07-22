@@ -9,6 +9,8 @@ from jose import jwt, JWTError
 from core.security import create_access_token, create_verification_token, create_set_password_token
 from core.email import send_verification_email
 from services.audit import log_user_activity, log_security_event
+from services import addresses as addresses_service
+from services import shipping_info as shipping_info_service
 from datetime import timedelta
 
 def get_user_by_email(db: Session, email: str):
@@ -205,4 +207,28 @@ def set_password(db: Session, token: str, new_password: str) -> tuple[models.Use
         entity_type="user",
         entity_id=user.id,
     )
+
+    # First-time guest -> account holder: seed their address book from the
+    # checkout shipping info so they don't have to retype it next order.
+    # Guarded on "user currently has zero addresses" so this only ever
+    # creates their first address, even if this endpoint is somehow hit
+    # twice for the same user.
+    has_address = db.query(models.Address).filter(models.Address.user_id == user.id).first() is not None
+    if not has_address:
+        shipping = shipping_info_service.get_order_shipping_info(db, order_id)
+        if shipping and shipping.address:
+            addresses_service.create_address(
+                db,
+                user.id,
+                schemas.AddressCreate(
+                    label="Home",
+                    phone=shipping.phone or "",
+                    line1=shipping.address,
+                    city=shipping.city or "",
+                    state=shipping.state or "",
+                    country=shipping.country or "Nigeria",
+                    is_default=True,
+                ),
+            )
+
     return user, order_id

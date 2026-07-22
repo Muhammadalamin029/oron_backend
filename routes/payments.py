@@ -6,6 +6,7 @@ import models
 import schemas
 from services import payments as payments_service
 from database.dependencies import get_db, get_current_verified_user, get_admin_user
+from utils.rate_limit import rate_limiter
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
@@ -26,6 +27,16 @@ async def payment_status(
     current_user: models.User = Depends(get_current_verified_user)
 ):
     return payments_service.get_payment_status(db, order_id, current_user.id, background_tasks)
+
+@router.post("/orders/{order_id}/verify", response_model=schemas.PaymentStatusResponse)
+async def verify_payment(
+    order_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_verified_user),
+    _: None = Depends(rate_limiter.limit(key="payments.verify", max_requests=5, window_seconds=60)),
+):
+    return await payments_service.verify_payment_with_paystack(db, order_id, current_user.id, background_tasks)
 
 @router.get("/my-payments", response_model=List[schemas.Payment])
 async def get_user_payments(
