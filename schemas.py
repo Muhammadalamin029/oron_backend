@@ -433,6 +433,78 @@ class OrderShippingInfo(OrderShippingInfoBase):
     updated_at: Optional[datetime] = None
 
 
+# Payment links
+class PaymentLinkItemCreate(BaseSchema):
+    product_id: str
+    default_quantity: int = 1
+
+    @field_validator("default_quantity")
+    @classmethod
+    def _qty_floor(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("default_quantity must be at least 1")
+        return v
+
+
+class PaymentLinkCreate(BaseSchema):
+    title: str
+    items: List[PaymentLinkItemCreate]
+    is_active: bool = True
+
+    @field_validator("items")
+    @classmethod
+    def _at_least_one_item(cls, v):
+        if not v:
+            raise ValueError("A payment link needs at least one product")
+        return v
+
+
+class PaymentLinkUpdate(BaseSchema):
+    title: Optional[str] = None
+    items: Optional[List[PaymentLinkItemCreate]] = None
+    is_active: Optional[bool] = None
+
+
+class PaymentLinkItem(BaseSchema):
+    id: str
+    payment_link_id: str
+    product_id: str
+    default_quantity: int
+    product: Product
+
+
+class PaymentLink(BaseSchema):
+    id: str
+    title: str
+    slug: str
+    created_by: str
+    is_active: bool
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    items: List[PaymentLinkItem]
+
+
+class PaymentLinkPublicItem(BaseSchema):
+    product_id: str
+    default_quantity: int
+    product: Product
+
+
+class PaymentLinkPublic(BaseSchema):
+    slug: str
+    title: str
+    items: List[PaymentLinkPublicItem]
+
+
+class PaymentLinkCheckoutRequest(BaseSchema):
+    items: List[OrderItemCreate]
+    shipping: OrderShippingInfoCreate
+
+
+class PaymentLinkCheckoutResponse(ChargeInitiateResponse):
+    email: EmailStr
+
+
 # Shipments
 class ShipmentBase(BaseSchema):
     carrier: str = ""

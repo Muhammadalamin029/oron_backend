@@ -67,6 +67,7 @@ class Order(Base):
 
     id = Column(String, primary_key=True, index=True)
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    payment_link_id = Column(String, ForeignKey("payment_links.id", ondelete="SET NULL"), nullable=True)
     total_amount = Column(Float, nullable=False)
     status = Column(String, default="pending")  # pending, unpaid, paid, expired, processing, shipped, delivered, cancelled
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -74,6 +75,7 @@ class Order(Base):
 
     # Relationships
     user = relationship("User", back_populates="orders")
+    payment_link = relationship("PaymentLink", back_populates="orders")
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="order", cascade="all, delete-orphan", order_by="Payment.created_at.desc()")
     disputes = relationship("Dispute", back_populates="order", cascade="all, delete-orphan")
@@ -280,3 +282,31 @@ class AdminAuditLog(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     admin_user = relationship("User", back_populates="audit_logs")
+
+
+class PaymentLink(Base):
+    __tablename__ = "payment_links"
+
+    id = Column(String, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    slug = Column(String, unique=True, index=True, nullable=False)
+    created_by = Column(String, ForeignKey("users.id"), nullable=False)  # the admin who created it, NOT the purchaser
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    items = relationship("PaymentLinkItem", back_populates="payment_link", cascade="all, delete-orphan")
+    orders = relationship("Order", back_populates="payment_link")
+    creator = relationship("User")
+
+
+class PaymentLinkItem(Base):
+    __tablename__ = "payment_link_items"
+
+    id = Column(String, primary_key=True, index=True)
+    payment_link_id = Column(String, ForeignKey("payment_links.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(String, ForeignKey("products.id"), nullable=False)
+    default_quantity = Column(Integer, default=1)
+
+    payment_link = relationship("PaymentLink", back_populates="items")
+    product = relationship("Product")

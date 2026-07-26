@@ -43,7 +43,7 @@ def _payment_to_charge_response(payment: models.Payment) -> dict:
     }
 
 
-async def initiate_bank_transfer_charge(db: Session, order_id: str, user_id: str, email: str, background_tasks: BackgroundTasks):
+async def initiate_bank_transfer_charge(db: Session, order_id: str, user_id: str, email: str, background_tasks: BackgroundTasks, order_url: str = None):
     order = get_order(db, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -158,13 +158,13 @@ async def initiate_bank_transfer_charge(db: Session, order_id: str, user_id: str
 
     background_tasks.add_task(
         send_bank_transfer_details_email,
-        email, order_id, bank_name, account_number, account_name, order.total_amount, expires_at,
+        email, order_id, bank_name, account_number, account_name, order.total_amount, expires_at, order_url,
     )
 
     return _payment_to_charge_response(db_payment)
 
 
-def get_payment_status(db: Session, order_id: str, user_id: str, background_tasks: BackgroundTasks):
+def get_payment_status(db: Session, order_id: str, user_id: str, background_tasks: BackgroundTasks, order_url: str = None):
     order = get_order(db, order_id)
     if not order or order.user_id != user_id:
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -190,7 +190,7 @@ def get_payment_status(db: Session, order_id: str, user_id: str, background_task
 
         shipping = shipping_info_service.get_order_shipping_info(db, order_id)
         if shipping and shipping.email:
-            background_tasks.add_task(send_bank_transfer_expired_email, shipping.email, order_id)
+            background_tasks.add_task(send_bank_transfer_expired_email, shipping.email, order_id, order_url)
 
     seconds_remaining = None
     if payment.expires_at:

@@ -103,11 +103,11 @@ def send_verify_and_set_password_email(to_email: str, token: str):
     send_email(to_email, "Welcome to ORON! Set a password to continue your order.", html_template)
 
 
-def send_bank_transfer_details_email(to_email: str, order_id: str, bank_name: str, account_number: str, account_name: str, amount: float, expires_at):
+def send_bank_transfer_details_email(to_email: str, order_id: str, bank_name: str, account_number: str, account_name: str, amount: float, expires_at, order_url: str = None):
     order_ref = order_id[-6:]
     expires_str = expires_at.strftime("%d %b %Y, %I:%M %p %Z") if expires_at else "shortly"
     amount_str = f"₦{amount:,.2f}"
-    order_url = f"{settings.FRONTEND_URL}/orders/{order_id}"
+    order_url = order_url or f"{settings.FRONTEND_URL}/orders/{order_id}"
     content = f"""
         <p>Complete your payment for order #{order_ref} by making a bank transfer for the exact amount below to the dedicated account number provided.</p>
         <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
@@ -129,9 +129,9 @@ def send_bank_transfer_details_email(to_email: str, order_id: str, bank_name: st
     send_email(to_email, "Complete Your Payment via Bank Transfer", html_template)
 
 
-def send_bank_transfer_expired_email(to_email: str, order_id: str):
+def send_bank_transfer_expired_email(to_email: str, order_id: str, order_url: str = None):
     order_ref = order_id[-6:]
-    order_url = f"{settings.FRONTEND_URL}/orders/{order_id}"
+    order_url = order_url or f"{settings.FRONTEND_URL}/orders/{order_id}"
     content = f"""
         <p>Your payment window for order #{order_ref} has expired without payment. No charge was made to any account.</p>
         <p>You can generate a new account number and complete your purchase at any time.</p>
