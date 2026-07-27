@@ -24,7 +24,7 @@ def _finalize_successful_payment(db: Session, order: models.Order):
 
     order.status = "paid"
     for item in order.items:
-        product = db.query(models.Product).filter(models.Product.id == item.product_id).first()
+        product = item.product
         if product and product.stock >= item.quantity:
             product.stock -= item.quantity
 
@@ -69,7 +69,7 @@ async def initiate_bank_transfer_charge(db: Session, order_id: str, user_id: str
         return _payment_to_charge_response(existing)
 
     for item in order.items:
-        product = db.query(models.Product).filter(models.Product.id == item.product_id).first()
+        product = item.product
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
         if product.stock < item.quantity:
@@ -105,8 +105,12 @@ async def initiate_bank_transfer_charge(db: Session, order_id: str, user_id: str
             "metadata": {"order_id": order_id},
         }
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, headers=headers, json=data)
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.post(url, headers=headers, json=data)
+        except httpx.RequestError as e:
+            print("Paystack request failed:", e)
+            raise HTTPException(status_code=503, detail="Payment provider is temporarily unavailable. Please try again shortly.")
 
         if response.status_code != 200:
             print("Paystack Error:", response.text)
@@ -235,10 +239,14 @@ async def verify_payment_with_paystack(db: Session, order_id: str, user_id: str,
         url = f"https://api.paystack.co/transaction/verify/{payment.reference}"
         headers = {"Authorization": f"Bearer {settings.PAYSTACK_SECRET_KEY}"}
 
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, headers=headers)
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.get(url, headers=headers)
+        except httpx.RequestError as e:
+            print("Paystack verify request failed:", e)
+            response = None
 
-        if response.status_code == 200:
+        if response is not None and response.status_code == 200:
             data = (response.json() or {}).get("data") or {}
             paystack_status = data.get("status")
 
@@ -290,7 +298,7 @@ async def handle_webhook(db: Session, signature: str, payload_bytes: bytes, back
         if payment and payment.status != "success":
             payment.status = "success"
 
-            order = db.query(models.Order).filter(models.Order.id == payment.order_id).first()
+            order = get_order(db, payment.order_id)
             if order:
                 _finalize_successful_payment(db, order)
 

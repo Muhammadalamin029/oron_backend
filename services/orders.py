@@ -96,8 +96,14 @@ def create_order(db: Session, order: schemas.OrderCreate, user_id: str, backgrou
         db.query(models.OrderItem).filter(models.OrderItem.order_id == db_order.id).delete()
         db.commit()
         
+        products_by_id = {
+            p.id: p
+            for p in db.query(models.Product).filter(
+                models.Product.id.in_([item.product_id for item in order.items])
+            ).all()
+        }
         for item in order.items:
-            product = db.query(models.Product).filter(models.Product.id == item.product_id).first()
+            product = products_by_id.get(item.product_id)
             if not product:
                 raise HTTPException(status_code=404, detail=f"Product {item.product_id} not found")
 

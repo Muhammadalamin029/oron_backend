@@ -44,8 +44,14 @@ def create_payment_link(db: Session, admin_user_id: str, data: schemas.PaymentLi
     )
     db.add(link)
     db.flush()
+    products_by_id = {
+        p.id: p
+        for p in db.query(models.Product).filter(
+            models.Product.id.in_([item.product_id for item in data.items])
+        ).all()
+    }
     for item in data.items:
-        product = db.query(models.Product).filter(models.Product.id == item.product_id).first()
+        product = products_by_id.get(item.product_id)
         if not product:
             raise HTTPException(status_code=404, detail=f"Product {item.product_id} not found")
         db.add(models.PaymentLinkItem(
@@ -80,8 +86,14 @@ def update_payment_link(db: Session, payment_link_id: str, data: schemas.Payment
             raise HTTPException(status_code=400, detail="A payment link needs at least one product")
         # Full replace — simplest correct approach, avoids add/remove/quantity-diff edge cases.
         db.query(models.PaymentLinkItem).filter(models.PaymentLinkItem.payment_link_id == link.id).delete()
+        products_by_id = {
+            p.id: p
+            for p in db.query(models.Product).filter(
+                models.Product.id.in_([item.product_id for item in data.items])
+            ).all()
+        }
         for item in data.items:
-            product = db.query(models.Product).filter(models.Product.id == item.product_id).first()
+            product = products_by_id.get(item.product_id)
             if not product:
                 raise HTTPException(status_code=404, detail=f"Product {item.product_id} not found")
             db.add(models.PaymentLinkItem(
@@ -149,7 +161,9 @@ async def guest_link_checkout(
             raise HTTPException(status_code=400, detail="Quantity must be at least 1")
 
     full_name = f"{data.shipping.first_name} {data.shipping.last_name}".strip()
-    user = auth_service.find_or_create_guest_account(db, data.shipping.email, full_name)
+    user = auth_service.find_or_create_guest_account(
+        db, data.shipping.email, full_name, allow_existing_account=True
+    )
     # Intentionally no create_set_password_token / send_verify_and_set_password_email here —
     # this is the one deliberate deviation from guest_checkout()'s pattern: no login is ever
     # expected for this flow, so the customer must never be sent a "verify your email" gate.
@@ -160,9 +174,13 @@ async def guest_link_checkout(
     db.add(order)
     db.flush()
 
+    # link.items already eager-loaded .product (via get_payment_link_by_slug's
+    # joinedload) — no extra query needed to price/validate each item.
+    products_by_id = {i.product_id: i.product for i in link.items}
+
     total_amount = 0.0
     for item in data.items:
-        product = db.query(models.Product).filter(models.Product.id == item.product_id).first()
+        product = products_by_id.get(item.product_id)
         if not product:
             raise HTTPException(status_code=404, detail=f"Product {item.product_id} not found")
         if product.stock < item.quantity:

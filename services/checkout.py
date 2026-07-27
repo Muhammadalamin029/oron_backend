@@ -23,13 +23,23 @@ def guest_checkout(db: Session, data: schemas.GuestCheckoutRequest, background_t
     if not data.items:
         raise HTTPException(status_code=400, detail="Cart is empty")
 
+    # One batched lookup instead of one query per item — each round trip to
+    # the DB is costly here, and this loop is the single biggest source of
+    # avoidable per-request latency in the checkout path.
+    products_by_id = {
+        p.id: p
+        for p in db.query(models.Product).filter(
+            models.Product.id.in_([item.product_id for item in data.items])
+        ).all()
+    }
+
     order = models.Order(id=str(uuid.uuid4()), user_id=user.id, total_amount=0.0, status="unpaid")
     db.add(order)
     db.flush()
 
     total_amount = 0.0
     for item in data.items:
-        product = db.query(models.Product).filter(models.Product.id == item.product_id).first()
+        product = products_by_id.get(item.product_id)
         if not product:
             raise HTTPException(status_code=404, detail=f"Product {item.product_id} not found")
         if item.quantity <= 0:

@@ -130,25 +130,32 @@ def authenticate_user(db: Session, email: str, password: str):
     return user
 
 
-def find_or_create_guest_account(db: Session, email: str, full_name: str) -> models.User:
+def find_or_create_guest_account(
+    db: Session, email: str, full_name: str, allow_existing_account: bool = False
+) -> models.User:
     """
     Used by guest checkout. Returns an existing not-yet-completed guest account to
     reuse (an abandoned prior guest checkout), or creates a brand-new one with no
     password. Raises 409 if the email already belongs to a fully set-up account,
     since guest checkout must never silently attach an order to someone else's
     account by email match alone.
+
+    Payment Links pass allow_existing_account=True: that flow never involves a
+    login/session, so a returning customer using their own real email should
+    just check out, not get blocked.
     """
     existing = get_user_by_email(db, email)
     if existing:
-        if existing.is_verified and existing.hashed_password:
+        is_full_account = existing.is_verified and existing.hashed_password
+        if is_full_account and not allow_existing_account:
             raise HTTPException(
                 status_code=409,
                 detail="An account with this email already exists. Please log in to continue.",
             )
-        if full_name:
+        if not is_full_account and full_name:
             existing.full_name = full_name
-        db.commit()
-        db.refresh(existing)
+            db.commit()
+            db.refresh(existing)
         return existing
 
     user = models.User(

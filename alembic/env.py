@@ -18,8 +18,14 @@ config = context.config
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
+# disable_existing_loggers=False matters here: this module runs via
+# command.upgrade() from main.py at app startup, *after* uvicorn has already
+# configured its own loggers (uvicorn/uvicorn.access/uvicorn.error) — the
+# fileConfig default of disable_existing_loggers=True would silently kill
+# all of uvicorn's logging (startup banner, access logs, error logs) for
+# the rest of the process's life.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Single source of truth for the DB URL is the app's own settings, not alembic.ini
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
 
 import models
 import schemas
+from services import orders as orders_service
 from database.dependencies import get_db, get_admin_user
 from typing import List
 
@@ -44,6 +45,15 @@ async def get_all_orders_with_users(db: Session = Depends(get_db), current_admin
         if not hasattr(order, 'user') or not order.user:
             order.user = db.query(models.User).filter(models.User.id == order.user_id).first()
     return orders
+
+@router.get("/orders/{order_id}", response_model=schemas.OrderWithUser)
+async def get_order_with_user(order_id: str, db: Session = Depends(get_db), current_admin = Depends(get_admin_user)):
+    order = orders_service.get_order(db, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if not hasattr(order, 'user') or not order.user:
+        order.user = db.query(models.User).filter(models.User.id == order.user_id).first()
+    return order
 
 @router.get("/users/stats", response_model=List[schemas.UserWithStats])
 async def get_users_with_stats(db: Session = Depends(get_db), current_admin = Depends(get_admin_user)):
