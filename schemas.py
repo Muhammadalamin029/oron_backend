@@ -278,6 +278,7 @@ class Payment(PaymentBase):
     id: str
     order_id: str
     created_at: datetime
+    order: Optional["OrderWithUser"] = None
 
 
 class ChargeInitiateResponse(BaseModel):
