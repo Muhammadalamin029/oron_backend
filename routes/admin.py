@@ -1,38 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from pydantic import BaseModel
 
 import models
 import schemas
 from services import orders as orders_service
+from services import dashboard as dashboard_service
 from database.dependencies import get_db, get_admin_user
 from typing import List
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-class DashboardStats(BaseModel):
-    total_revenue: float
-    total_orders: int
-    total_products: int
-    total_customers: int
-
-@router.get("/stats", response_model=DashboardStats)
-async def get_dashboard_stats(db: Session = Depends(get_db), current_admin = Depends(get_admin_user)):
-    revenue = db.query(func.sum(models.Order.total_amount))\
-        .filter(models.Order.status.in_(['paid', 'completed', 'success', 'shipped', 'delivered']))\
-        .scalar() or 0.0
-
-    total_orders = db.query(models.Order).count()
-    total_products = db.query(models.Product).count()
-    total_customers = db.query(models.User).filter(models.User.is_admin == False).count()
-
-    return DashboardStats(
-        total_revenue=float(revenue),
-        total_orders=total_orders,
-        total_products=total_products,
-        total_customers=total_customers
-    )
+@router.get("/dashboard", response_model=schemas.AdminDashboardResponse)
+async def get_admin_dashboard(db: Session = Depends(get_db), current_admin = Depends(get_admin_user)):
+    return dashboard_service.get_dashboard_overview(db)
 
 @router.get("/orders", response_model=List[schemas.OrderWithUser])
 async def get_all_orders_with_users(db: Session = Depends(get_db), current_admin = Depends(get_admin_user)):

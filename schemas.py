@@ -578,6 +578,36 @@ class AdminAuditLog(BaseSchema):
     created_at: datetime
 
 
+# Admin dashboard
+class DashboardStats(BaseModel):
+    total_revenue: float
+    total_orders: int
+    total_products: int
+    total_customers: int
+
+
+class DashboardRecentOrder(BaseModel):
+    id: str
+    total_amount: float
+    status: str
+    created_at: datetime
+    customer_name: str
+    customer_email: str
+    product_name: str
+
+
+class DashboardTopProduct(BaseModel):
+    product_id: str
+    product_name: str
+    units_sold: int
+
+
+class AdminDashboardResponse(BaseModel):
+    stats: DashboardStats
+    recent_orders: List[DashboardRecentOrder]
+    top_products: List[DashboardTopProduct]
+
+
 # Resolve forward references
 Order.model_rebuild()
 GuestCheckoutRequest.model_rebuild()
