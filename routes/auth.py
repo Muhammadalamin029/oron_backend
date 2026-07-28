@@ -3,7 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import List
 
-from schemas import UserCreate, AuthResponse, User, RefreshTokenRequest, UserUpdate, ResendVerificationRequest, SetPasswordRequest, SetPasswordResponse
+from schemas import UserCreate, AuthResponse, User, RefreshTokenRequest, UserUpdate, ResendVerificationRequest, SetPasswordRequest, SetPasswordResponse, ForgotPasswordRequest
 from services import auth as auth_service
 from database.dependencies import get_db, get_current_active_user, get_admin_user
 from core.security import create_access_token, create_refresh_token
@@ -62,19 +62,24 @@ async def resend_verification(
 ):
     return auth_service.resend_verification_email(db, request.email, background_tasks)
 
+@router.post("/forgot-password")
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    _: None = Depends(rate_limiter.limit(key="auth.forgot_password", max_requests=5, window_seconds=300)),
+):
+    auth_service.request_password_reset(db, request.email, background_tasks)
+    return {"msg": "If an account exists for this email, we've sent a link to access it."}
+
 @router.post("/login", response_model=AuthResponse)
 async def login(
+    background_tasks: BackgroundTasks,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
     _: None = Depends(rate_limiter.limit(key="auth.login", max_requests=15, window_seconds=60)),
 ):
-    user = auth_service.authenticate_user(db, form_data.username, form_data.password)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    user = auth_service.authenticate_or_trigger_activation(db, form_data.username, form_data.password, background_tasks)
     access_token = create_access_token(data={"sub": user.email})
     refresh_token = create_refresh_token(data={"sub": user.email})
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer", "user": user}

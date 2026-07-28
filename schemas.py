@@ -88,6 +88,10 @@ class ResendVerificationRequest(BaseModel):
     email: EmailStr
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
 class SetPasswordRequest(BaseModel):
     token: str
     password: str
@@ -99,7 +103,7 @@ class SetPasswordRequest(BaseModel):
 
 
 class SetPasswordResponse(AuthResponse):
-    order_id: str
+    order_id: Optional[str] = None
 
 
 # Notification schemas

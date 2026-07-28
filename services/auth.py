@@ -1,4 +1,5 @@
 import uuid
+from typing import Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, BackgroundTasks
 import models
@@ -7,7 +8,7 @@ from core.security import verify_password, get_password_hash
 from core.config import settings
 from jose import jwt, JWTError
 from core.security import create_access_token, create_verification_token, create_set_password_token
-from core.email import send_verification_email
+from core.email import send_verification_email, send_account_access_email
 from services.audit import log_user_activity, log_security_event
 from services import addresses as addresses_service
 from services import shipping_info as shipping_info_service
@@ -130,6 +131,66 @@ def authenticate_user(db: Session, email: str, password: str):
     return user
 
 
+def authenticate_or_trigger_activation(
+    db: Session, email: str, password: str, background_tasks: BackgroundTasks
+) -> models.User:
+    """
+    Used by POST /auth/login. If the email belongs to an account that has
+    never had a password set (hashed_password IS NULL — a payment-link/guest
+    account), this is not "wrong password": fire an activation email (same
+    generalized set_password token, no order_id) and raise 403 with a
+    machine-readable detail so the frontend can redirect to the "check your
+    email" view instead of showing a wrong-password error. 401 stays reserved
+    for genuinely wrong credentials, so it never reveals which case it was.
+    """
+    user = get_user_by_email(db, email)
+    if user and not user.hashed_password:
+        token = create_set_password_token(data={"sub": user.email})
+        background_tasks.add_task(send_account_access_email, user.email, token)
+        log_user_activity(
+            db,
+            user_id=user.id,
+            action="user.login_triggered_activation",
+            entity_type="user",
+            entity_id=user.id,
+            meta={"email": user.email},
+        )
+        raise HTTPException(status_code=403, detail="ACCOUNT_NEEDS_ACTIVATION")
+
+    authenticated = authenticate_user(db, email, password)
+    if not authenticated:
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return authenticated
+
+
+def request_password_reset(db: Session, email: str, background_tasks: BackgroundTasks) -> None:
+    """
+    Forgot-password entry point. Deliberately returns nothing distinguishable —
+    the route always sends the same generic response regardless of whether the
+    email matches an account, so this must never let "not found" leak out.
+    If the account exists (with or without a password already set), mints a
+    set_password token with no order_id (not tied to any one purchase) and
+    emails it via the neutral send_account_access_email template.
+    """
+    user = get_user_by_email(db, email)
+    if user:
+        token = create_set_password_token(data={"sub": user.email})
+        background_tasks.add_task(send_account_access_email, user.email, token)
+        log_user_activity(
+            db,
+            user_id=user.id,
+            action="user.password_reset_requested",
+            entity_type="user",
+            entity_id=user.id,
+            meta={"email": user.email},
+        )
+    return None
+
+
 def find_or_create_guest_account(
     db: Session, email: str, full_name: str, allow_existing_account: bool = False
 ) -> models.User:
@@ -182,18 +243,20 @@ def find_or_create_guest_account(
     return user
 
 
-def set_password(db: Session, token: str, new_password: str) -> tuple[models.User, str]:
+def set_password(db: Session, token: str, new_password: str) -> tuple[models.User, Optional[str]]:
     """
-    Completes the guest-checkout combined verify-email + set-password step.
-    Returns the user and the order_id embedded in the token so the caller
-    (route) can tell the frontend where to redirect.
+    Completes the set-password step for three trigger contexts: guest-checkout
+    activation (order_id present), login-triggered activation, and
+    forgot-password (both order_id-less). Returns the user and the order_id
+    embedded in the token, if any, so the caller (route) can tell the
+    frontend where to redirect.
     """
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         email = payload.get("sub")
-        order_id = payload.get("order_id")
+        order_id = payload.get("order_id")  # optional — absent for login-activation / forgot-password tokens
         token_type = payload.get("type")
-        if token_type != "set_password" or not email or not order_id:
+        if token_type != "set_password" or not email:
             raise HTTPException(status_code=400, detail="Invalid or expired token")
     except JWTError:
         raise HTTPException(status_code=400, detail="Invalid or expired token")
@@ -221,7 +284,7 @@ def set_password(db: Session, token: str, new_password: str) -> tuple[models.Use
     # creates their first address, even if this endpoint is somehow hit
     # twice for the same user.
     has_address = db.query(models.Address).filter(models.Address.user_id == user.id).first() is not None
-    if not has_address:
+    if order_id and not has_address:
         shipping = shipping_info_service.get_order_shipping_info(db, order_id)
         if shipping and shipping.address:
             addresses_service.create_address(

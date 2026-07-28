@@ -138,6 +138,28 @@ def send_verify_and_set_password_email(to_email: str, token: str):
     send_email(to_email, "Welcome to ORON! Set a password to continue your order.", html_template)
 
 
+def send_account_access_email(to_email: str, token: str):
+    set_password_url = f"{settings.FRONTEND_URL}/auth/set-password?token={token}"
+    content = f"""
+        <p>We received a request to access your ORON account.</p>
+        <p>Click the button below to set a password and get in. If you didn't request this, you can safely ignore this email — your account is unchanged.</p>
+        <div style="text-align: center;">
+            <a href="{set_password_url}" class="button">Set My Password</a>
+        </div>
+        <p style="margin-top: 32px; font-size: 14px; color: #71717a;">
+            Or copy and paste this link into your browser:<br>
+            <a href="{set_password_url}" style="color: #3b82f6;">{set_password_url}</a>
+        </p>
+        <p style="margin-top: 24px; font-size: 13px; color: #71717a;">This link expires in 48 hours.</p>
+    """
+    html_template = get_base_html_template(
+        title="Access Your ORON Account",
+        preheader="Set a password to sign in to your ORON account.",
+        content=content
+    )
+    send_email(to_email, "Access your ORON account", html_template)
+
+
 def send_bank_transfer_details_email(
     to_email: str, order_id: str, bank_name: str, account_number: str, account_name: str,
     amount: float, expires_at, order_url: str = None,
