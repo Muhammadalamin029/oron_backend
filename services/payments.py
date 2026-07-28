@@ -9,15 +9,15 @@ from fastapi import HTTPException, BackgroundTasks
 
 import models
 from core.config import settings
-from core.email import send_bank_transfer_details_email, send_bank_transfer_expired_email
+from core.email import send_bank_transfer_details_email, send_bank_transfer_expired_email, send_payment_confirmation_email
 from services.notifications import trigger_payment_notifications
 from services.orders import get_order
 from services import shipping_info as shipping_info_service
 
 
-def _finalize_successful_payment(db: Session, order: models.Order):
+def _finalize_successful_payment(db: Session, order: models.Order, background_tasks: BackgroundTasks):
     """
-    Marks order as paid and deducts stock once.
+    Marks order as paid, deducts stock once, and emails the customer a receipt.
     """
     if order.status == "paid":
         return
@@ -27,6 +27,40 @@ def _finalize_successful_payment(db: Session, order: models.Order):
         product = item.product
         if product and product.stock >= item.quantity:
             product.stock -= item.quantity
+
+    if order.user and order.user.email:
+        background_tasks.add_task(
+            send_payment_confirmation_email,
+            order.user.email, order.id, order.total_amount, _order_url_for_email(order),
+            _order_items_for_email(order), _shipping_for_email(order), order.created_at,
+        )
+
+
+def _order_items_for_email(order: models.Order) -> list:
+    return [
+        {"name": item.product.name if item.product else "Product", "quantity": item.quantity, "price": item.price}
+        for item in order.items
+    ]
+
+
+def _shipping_for_email(order: models.Order) -> dict | None:
+    shipping = order.shipping_info
+    if not shipping:
+        return None
+    return {
+        "first_name": shipping.first_name,
+        "last_name": shipping.last_name,
+        "phone": shipping.phone,
+        "address": shipping.address,
+        "city": shipping.city,
+        "state": shipping.state,
+    }
+
+
+def _order_url_for_email(order: models.Order) -> str:
+    if order.payment_link_id:
+        return f"{settings.FRONTEND_URL}/pay/session/{order.id}"
+    return f"{settings.FRONTEND_URL}/orders/{order.id}"
 
 
 def _payment_to_charge_response(payment: models.Payment) -> dict:
@@ -163,6 +197,7 @@ async def initiate_bank_transfer_charge(db: Session, order_id: str, user_id: str
     background_tasks.add_task(
         send_bank_transfer_details_email,
         email, order_id, bank_name, account_number, account_name, order.total_amount, expires_at, order_url,
+        _order_items_for_email(order), _shipping_for_email(order), order.created_at,
     )
 
     return _payment_to_charge_response(db_payment)
@@ -254,7 +289,7 @@ async def verify_payment_with_paystack(db: Session, order_id: str, user_id: str,
                 payment.status = "success"
                 db.commit()
                 db.refresh(payment)
-                _finalize_successful_payment(db, order)
+                _finalize_successful_payment(db, order, background_tasks)
                 db.commit()
                 db.refresh(order)
                 trigger_payment_notifications(db, payment, background_tasks)
@@ -300,7 +335,7 @@ async def handle_webhook(db: Session, signature: str, payload_bytes: bytes, back
 
             order = get_order(db, payment.order_id)
             if order:
-                _finalize_successful_payment(db, order)
+                _finalize_successful_payment(db, order, background_tasks)
 
             db.commit()
             db.refresh(payment)

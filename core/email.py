@@ -62,6 +62,41 @@ def get_base_html_template(title: str, preheader: str, content: str) -> str:
     </html>
     """
 
+def _render_order_items_html(items: list) -> str:
+    """items: list of {"name": str, "quantity": int, "price": float}. Empty/None renders nothing."""
+    if not items:
+        return ""
+    rows = "".join(
+        f"""
+        <tr>
+            <td style="padding: 8px 0; border-bottom: 1px solid #e4e4e7;">{item['name']} &times; {item['quantity']}</td>
+            <td style="padding: 8px 0; border-bottom: 1px solid #e4e4e7; text-align: right;">₦{item['price'] * item['quantity']:,.2f}</td>
+        </tr>"""
+        for item in items
+    )
+    return f"""
+        <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            {rows}
+        </table>
+    """
+
+
+def _render_shipping_html(shipping_info) -> str:
+    """shipping_info: dict with first_name/last_name/phone/address/city/state, or None."""
+    if not shipping_info:
+        return ""
+    name = f"{shipping_info.get('first_name', '')} {shipping_info.get('last_name', '')}".strip()
+    return f"""
+        <div style="margin: 20px 0;">
+            <p style="margin: 0 0 4px 0;"><strong>Shipping to:</strong></p>
+            <p style="margin: 0; color: #52525b;">
+                {name}{f" &middot; {shipping_info['phone']}" if shipping_info.get('phone') else ""}<br>
+                {shipping_info.get('address', '')}, {shipping_info.get('city', '')} {shipping_info.get('state', '')}
+            </p>
+        </div>
+    """
+
+
 def send_verification_email(to_email: str, token: str):
     verify_url = f"{settings.FRONTEND_URL}/auth/verify-email?token={token}"
     content = f"""
@@ -103,13 +138,18 @@ def send_verify_and_set_password_email(to_email: str, token: str):
     send_email(to_email, "Welcome to ORON! Set a password to continue your order.", html_template)
 
 
-def send_bank_transfer_details_email(to_email: str, order_id: str, bank_name: str, account_number: str, account_name: str, amount: float, expires_at, order_url: str = None):
+def send_bank_transfer_details_email(
+    to_email: str, order_id: str, bank_name: str, account_number: str, account_name: str,
+    amount: float, expires_at, order_url: str = None,
+    items: list = None, shipping_info=None, created_at=None,
+):
     order_ref = order_id[-6:]
     expires_str = expires_at.strftime("%d %b %Y, %I:%M %p %Z") if expires_at else "shortly"
     amount_str = f"₦{amount:,.2f}"
     order_url = order_url or f"{settings.FRONTEND_URL}/orders/{order_id}"
+    date_str = created_at.strftime("%d %b %Y") if created_at else None
     content = f"""
-        <p>Complete your payment for order #{order_ref} by making a bank transfer for the exact amount below to the dedicated account number provided.</p>
+        <p>Complete your payment for order #{order_ref}{f" (placed {date_str})" if date_str else ""} by making a bank transfer for the exact amount below to the dedicated account number provided.</p>
         <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
             <p><strong>Bank:</strong> {bank_name or 'N/A'}</p>
             <p><strong>Account Number:</strong> {account_number or 'N/A'}</p>
@@ -117,6 +157,8 @@ def send_bank_transfer_details_email(to_email: str, order_id: str, bank_name: st
             <p><strong>Amount:</strong> {amount_str}</p>
         </div>
         <p>This account number is valid until <strong>{expires_str}</strong>. Transfer the exact amount shown — your order will be marked paid automatically once we receive it.</p>
+        {f'<p style="margin-top: 24px;"><strong>Order Summary</strong></p>{_render_order_items_html(items)}' if items else ""}
+        {_render_shipping_html(shipping_info)}
         <div style="text-align: center;">
             <a href="{order_url}" class="button">View Order</a>
         </div>
@@ -145,6 +187,34 @@ def send_bank_transfer_expired_email(to_email: str, order_id: str, order_url: st
         content=content
     )
     send_email(to_email, f"Payment Window Expired: Order #{order_ref}", html_template)
+
+
+def send_payment_confirmation_email(
+    to_email: str, order_id: str, amount: float, order_url: str = None,
+    items: list = None, shipping_info=None, created_at=None,
+):
+    order_ref = order_id[-6:]
+    amount_str = f"₦{amount:,.2f}"
+    order_url = order_url or f"{settings.FRONTEND_URL}/orders/{order_id}"
+    date_str = created_at.strftime("%d %b %Y") if created_at else None
+    content = f"""
+        <p>We've received your payment for order #{order_ref}{f" (placed {date_str})" if date_str else ""}. Thank you for shopping with ORON!</p>
+        <div style="background-color: #f0fdf4; padding: 15px; border-radius: 5px; margin: 20px 0; border: 1px solid #bbf7d0;">
+            <p style="margin: 0; color: #166534;"><strong>Amount Paid:</strong> {amount_str}</p>
+        </div>
+        {f'<p style="margin-top: 24px;"><strong>Order Summary</strong></p>{_render_order_items_html(items)}' if items else ""}
+        {_render_shipping_html(shipping_info)}
+        <p>We're now preparing your order. You'll get another email as its status changes.</p>
+        <div style="text-align: center;">
+            <a href="{order_url}" class="button">View Order</a>
+        </div>
+    """
+    html_template = get_base_html_template(
+        title="Payment Received",
+        preheader=f"We've received your payment for order #{order_ref}.",
+        content=content
+    )
+    send_email(to_email, f"Payment Confirmed: Order #{order_ref}", html_template)
 
 
 def send_notification_email(to_email: str, title: str, message: str):
