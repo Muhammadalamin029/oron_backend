@@ -1,7 +1,7 @@
 import re
 from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, date
 
 
 # Base schemas
@@ -602,10 +602,23 @@ class DashboardTopProduct(BaseModel):
     units_sold: int
 
 
+class DashboardNeedsAttention(BaseModel):
+    open_disputes: int
+    open_support_tickets: int
+    pending_payments: int
+
+
+class DashboardRevenuePoint(BaseModel):
+    date: date
+    revenue: float
+
+
 class AdminDashboardResponse(BaseModel):
     stats: DashboardStats
     recent_orders: List[DashboardRecentOrder]
     top_products: List[DashboardTopProduct]
+    needs_attention: DashboardNeedsAttention
+    revenue_trend: List[DashboardRevenuePoint]
 
 
 # Resolve forward references
