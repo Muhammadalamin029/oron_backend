@@ -1,7 +1,19 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, UniqueConstraint, JSON
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Float,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Text,
+    UniqueConstraint,
+    JSON,
+)
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from uuid import uuid4
 
 Base = declarative_base()
 
@@ -12,7 +24,9 @@ class User(Base):
     id = Column(String, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     full_name = Column(String, nullable=False)
-    hashed_password = Column(String, nullable=True)  # null until a guest-checkout account sets a password
+    hashed_password = Column(
+        String, nullable=True
+    )  # null until a guest-checkout account sets a password
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
     is_verified = Column(Boolean, default=False)
@@ -21,13 +35,30 @@ class User(Base):
 
     # Relationships
     orders = relationship("Order", back_populates="user")
-    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
-    favorites = relationship("Favorite", back_populates="user", cascade="all, delete-orphan")
-    reviews = relationship("Review", back_populates="user", cascade="all, delete-orphan")
-    disputes = relationship("Dispute", back_populates="user", cascade="all, delete-orphan")
-    addresses = relationship("Address", back_populates="user", cascade="all, delete-orphan")
-    support_tickets = relationship("SupportTicket", back_populates="user", cascade="all, delete-orphan")
-    audit_logs = relationship("AdminAuditLog", back_populates="admin_user", cascade="all, delete-orphan")
+    notifications = relationship(
+        "Notification", back_populates="user", cascade="all, delete-orphan"
+    )
+    favorites = relationship(
+        "Favorite", back_populates="user", cascade="all, delete-orphan"
+    )
+    reviews = relationship(
+        "Review", back_populates="user", cascade="all, delete-orphan"
+    )
+    disputes = relationship(
+        "Dispute", back_populates="user", cascade="all, delete-orphan"
+    )
+    addresses = relationship(
+        "Address", back_populates="user", cascade="all, delete-orphan"
+    )
+    support_tickets = relationship(
+        "SupportTicket", back_populates="user", cascade="all, delete-orphan"
+    )
+    audit_logs = relationship(
+        "AdminAuditLog", back_populates="admin_user", cascade="all, delete-orphan"
+    )
+    broadcast_messages = relationship(
+        "BroadcastMessage", back_populates="sent_by_admin", cascade="all, delete-orphan"
+    )
 
 
 class Category(Base):
@@ -59,7 +90,9 @@ class Product(Base):
     # Relationships
     category = relationship("Category", back_populates="products")
     order_items = relationship("OrderItem", back_populates="product")
-    reviews = relationship("Review", back_populates="product", cascade="all, delete-orphan")
+    reviews = relationship(
+        "Review", back_populates="product", cascade="all, delete-orphan"
+    )
 
 
 class Order(Base):
@@ -67,20 +100,40 @@ class Order(Base):
 
     id = Column(String, primary_key=True, index=True)
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
-    payment_link_id = Column(String, ForeignKey("payment_links.id", ondelete="SET NULL"), nullable=True)
+    payment_link_id = Column(
+        String, ForeignKey("payment_links.id", ondelete="SET NULL"), nullable=True
+    )
     total_amount = Column(Float, nullable=False)
-    status = Column(String, default="pending")  # pending, unpaid, paid, expired, processing, shipped, delivered, cancelled
+    status = Column(
+        String, default="pending"
+    )  # pending, unpaid, paid, expired, processing, shipped, delivered, cancelled
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
     user = relationship("User", back_populates="orders")
     payment_link = relationship("PaymentLink", back_populates="orders")
-    items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
-    payments = relationship("Payment", back_populates="order", cascade="all, delete-orphan", order_by="Payment.created_at.desc()")
-    disputes = relationship("Dispute", back_populates="order", cascade="all, delete-orphan")
-    shipments = relationship("Shipment", back_populates="order", cascade="all, delete-orphan")
-    shipping_info = relationship("OrderShippingInfo", back_populates="order", uselist=False, cascade="all, delete-orphan")
+    items = relationship(
+        "OrderItem", back_populates="order", cascade="all, delete-orphan"
+    )
+    payments = relationship(
+        "Payment",
+        back_populates="order",
+        cascade="all, delete-orphan",
+        order_by="Payment.created_at.desc()",
+    )
+    disputes = relationship(
+        "Dispute", back_populates="order", cascade="all, delete-orphan"
+    )
+    shipments = relationship(
+        "Shipment", back_populates="order", cascade="all, delete-orphan"
+    )
+    shipping_info = relationship(
+        "OrderShippingInfo",
+        back_populates="order",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
 
 class OrderItem(Base):
@@ -111,23 +164,29 @@ class Notification(Base):
     # Relationships
     user = relationship("User", back_populates="notifications")
 
+
 class Favorite(Base):
     __tablename__ = "favorites"
 
     id = Column(String, primary_key=True, index=True)
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    product_id = Column(String, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(
+        String, ForeignKey("products.id", ondelete="CASCADE"), nullable=False
+    )
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
     user = relationship("User", back_populates="favorites")
     product = relationship("Product")
 
+
 class Payment(Base):
     __tablename__ = "payments"
 
     id = Column(String, primary_key=True, index=True)
-    order_id = Column(String, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
+    order_id = Column(
+        String, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False
+    )
     amount = Column(Float, nullable=False)
     provider = Column(String, default="paystack")
     reference = Column(String, unique=True, nullable=False)
@@ -144,6 +203,7 @@ class Payment(Base):
     # Relationships
     order = relationship("Order", back_populates="payments")
 
+
 class SiteSetting(Base):
     __tablename__ = "site_settings"
 
@@ -155,11 +215,15 @@ class SiteSetting(Base):
 
 class Review(Base):
     __tablename__ = "reviews"
-    __table_args__ = (UniqueConstraint("user_id", "product_id", name="uq_review_user_product"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "product_id", name="uq_review_user_product"),
+    )
 
     id = Column(String, primary_key=True, index=True)
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    product_id = Column(String, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    product_id = Column(
+        String, ForeignKey("products.id", ondelete="CASCADE"), nullable=False
+    )
     rating = Column(Integer, nullable=False)
     title = Column(String, default="")
     comment = Column(Text, default="")
@@ -176,7 +240,9 @@ class Dispute(Base):
 
     id = Column(String, primary_key=True, index=True)
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    order_id = Column(String, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
+    order_id = Column(
+        String, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False
+    )
     reason = Column(String, nullable=False)
     description = Column(Text, default="")
     status = Column(String, default="open")  # open, under_review, resolved, rejected
@@ -212,7 +278,9 @@ class OrderShippingInfo(Base):
     __tablename__ = "order_shipping_info"
 
     id = Column(String, primary_key=True, index=True)
-    order_id = Column(String, ForeignKey("orders.id", ondelete="CASCADE"), unique=True, nullable=False)
+    order_id = Column(
+        String, ForeignKey("orders.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
     email = Column(String, default="")
     phone = Column(String, default="")
     first_name = Column(String, default="")
@@ -231,10 +299,14 @@ class Shipment(Base):
     __tablename__ = "shipments"
 
     id = Column(String, primary_key=True, index=True)
-    order_id = Column(String, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
+    order_id = Column(
+        String, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False
+    )
     carrier = Column(String, default="")
     tracking_number = Column(String, default="")
-    status = Column(String, default="label_created")  # label_created, in_transit, delivered
+    status = Column(
+        String, default="label_created"
+    )  # label_created, in_transit, delivered
     shipped_at = Column(DateTime(timezone=True), nullable=True)
     delivered_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -255,14 +327,18 @@ class SupportTicket(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     user = relationship("User", back_populates="support_tickets")
-    messages = relationship("SupportMessage", back_populates="ticket", cascade="all, delete-orphan")
+    messages = relationship(
+        "SupportMessage", back_populates="ticket", cascade="all, delete-orphan"
+    )
 
 
 class SupportMessage(Base):
     __tablename__ = "support_messages"
 
     id = Column(String, primary_key=True, index=True)
-    ticket_id = Column(String, ForeignKey("support_tickets.id", ondelete="CASCADE"), nullable=False)
+    ticket_id = Column(
+        String, ForeignKey("support_tickets.id", ondelete="CASCADE"), nullable=False
+    )
     sender = Column(String, default="user")  # user/admin
     message = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -274,7 +350,9 @@ class AdminAuditLog(Base):
     __tablename__ = "admin_audit_logs"
 
     id = Column(String, primary_key=True, index=True)
-    admin_user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    admin_user_id = Column(
+        String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     action = Column(String, nullable=False)
     entity_type = Column(String, nullable=False)
     entity_id = Column(String, default="")
@@ -290,12 +368,16 @@ class PaymentLink(Base):
     id = Column(String, primary_key=True, index=True)
     title = Column(String, nullable=False)
     slug = Column(String, unique=True, index=True, nullable=False)
-    created_by = Column(String, ForeignKey("users.id"), nullable=False)  # the admin who created it, NOT the purchaser
+    created_by = Column(
+        String, ForeignKey("users.id"), nullable=False
+    )  # the admin who created it, NOT the purchaser
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    items = relationship("PaymentLinkItem", back_populates="payment_link", cascade="all, delete-orphan")
+    items = relationship(
+        "PaymentLinkItem", back_populates="payment_link", cascade="all, delete-orphan"
+    )
     orders = relationship("Order", back_populates="payment_link")
     creator = relationship("User")
 
@@ -304,9 +386,38 @@ class PaymentLinkItem(Base):
     __tablename__ = "payment_link_items"
 
     id = Column(String, primary_key=True, index=True)
-    payment_link_id = Column(String, ForeignKey("payment_links.id", ondelete="CASCADE"), nullable=False)
+    payment_link_id = Column(
+        String, ForeignKey("payment_links.id", ondelete="CASCADE"), nullable=False
+    )
     product_id = Column(String, ForeignKey("products.id"), nullable=False)
     default_quantity = Column(Integer, default=1)
 
     payment_link = relationship("PaymentLink", back_populates="items")
     product = relationship("Product")
+
+
+class BroadcastMessage(Base):
+    __tablename__ = "broadcast_messages"
+
+    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid4()))
+    sent_by_admin_id = Column(
+        String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    subject = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+    include_customers = Column(Boolean, default=False)
+    include_newsletter = Column(Boolean, default=False)
+    recipient_count = Column(Integer, default=0)
+    recipient_emails = Column(JSON, default=list)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    sent_by_admin = relationship("User", back_populates="broadcast_messages")
+
+
+class NewsletterSubscriber(Base):
+    __tablename__ = "newsletter_subscribers"
+
+    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid4()))
+    email = Column(String, unique=True, index=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

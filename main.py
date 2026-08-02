@@ -4,7 +4,26 @@ from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routes import auth, products, orders, categories, notifications, favourites, payments, settings, reviews, disputes, addresses, shipments, support, admin, checkout, payment_links
+from routes import (
+    auth,
+    products,
+    orders,
+    categories,
+    notifications,
+    favourites,
+    payments,
+    settings,
+    reviews,
+    disputes,
+    addresses,
+    shipments,
+    support,
+    admin,
+    checkout,
+    payment_links,
+    broadcast,
+    newsletter,
+)
 from database.database import SessionLocal
 from utils.bootstrapping import preseed_settings, preseed_admin
 from core.config import settings as app_settings
@@ -55,12 +74,15 @@ app.include_router(support.router)
 app.include_router(admin.router)
 app.include_router(checkout.router)
 app.include_router(payment_links.router)
+app.include_router(broadcast.router)
+app.include_router(newsletter.router)
+
 
 @app.get("/")
 async def root():
     return {"message": "ORON Watch Marketplace API", "version": "1.0.0"}
 
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "ORON API"}
-

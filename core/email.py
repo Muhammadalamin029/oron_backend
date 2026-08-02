@@ -1,7 +1,11 @@
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from typing import Optional
+import html as html_lib
+
 from core.config import settings
+
 
 def send_email(to_email: str, subject: str, html_content: str):
     if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
@@ -24,6 +28,7 @@ def send_email(to_email: str, subject: str, html_content: str):
         server.quit()
     except Exception as e:
         print(f"Failed to send email to {to_email}: {e}")
+
 
 def get_base_html_template(title: str, preheader: str, content: str) -> str:
     return f"""
@@ -62,18 +67,16 @@ def get_base_html_template(title: str, preheader: str, content: str) -> str:
     </html>
     """
 
+
 def _render_order_items_html(items: list) -> str:
     """items: list of {"name": str, "quantity": int, "price": float}. Empty/None renders nothing."""
     if not items:
         return ""
-    rows = "".join(
-        f"""
+    rows = "".join(f"""
         <tr>
             <td style="padding: 8px 0; border-bottom: 1px solid #e4e4e7;">{item['name']} &times; {item['quantity']}</td>
             <td style="padding: 8px 0; border-bottom: 1px solid #e4e4e7; text-align: right;">₦{item['price'] * item['quantity']:,.2f}</td>
-        </tr>"""
-        for item in items
-    )
+        </tr>""" for item in items)
     return f"""
         <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
             {rows}
@@ -113,9 +116,10 @@ def send_verification_email(to_email: str, token: str):
     html_template = get_base_html_template(
         title="Verify Your Email",
         preheader="Confirm your email address to finish setting up your ORON account.",
-        content=content
+        content=content,
     )
     send_email(to_email, "Welcome to ORON! Please verify your email.", html_template)
+
 
 def send_verify_and_set_password_email(to_email: str, token: str):
     set_password_url = f"{settings.FRONTEND_URL}/auth/set-password?token={token}"
@@ -133,9 +137,13 @@ def send_verify_and_set_password_email(to_email: str, token: str):
     html_template = get_base_html_template(
         title="Verify Your Email & Set a Password",
         preheader="You're one step from tracking your ORON order.",
-        content=content
+        content=content,
     )
-    send_email(to_email, "Welcome to ORON! Set a password to continue your order.", html_template)
+    send_email(
+        to_email,
+        "Welcome to ORON! Set a password to continue your order.",
+        html_template,
+    )
 
 
 def send_account_access_email(to_email: str, token: str):
@@ -155,18 +163,28 @@ def send_account_access_email(to_email: str, token: str):
     html_template = get_base_html_template(
         title="Access Your ORON Account",
         preheader="Set a password to sign in to your ORON account.",
-        content=content
+        content=content,
     )
     send_email(to_email, "Access your ORON account", html_template)
 
 
 def send_bank_transfer_details_email(
-    to_email: str, order_id: str, bank_name: str, account_number: str, account_name: str,
-    amount: float, expires_at, order_url: str = None,
-    items: list = None, shipping_info=None, created_at=None,
+    to_email: str,
+    order_id: str,
+    bank_name: str,
+    account_number: str,
+    account_name: str,
+    amount: float,
+    expires_at,
+    order_url: Optional[str] = None,
+    items: Optional[list] = None,
+    shipping_info=None,
+    created_at=None,
 ):
     order_ref = order_id[-6:]
-    expires_str = expires_at.strftime("%d %b %Y, %I:%M %p %Z") if expires_at else "shortly"
+    expires_str = (
+        expires_at.strftime("%d %b %Y, %I:%M %p %Z") if expires_at else "shortly"
+    )
     amount_str = f"₦{amount:,.2f}"
     order_url = order_url or f"{settings.FRONTEND_URL}/orders/{order_id}"
     date_str = created_at.strftime("%d %b %Y") if created_at else None
@@ -188,12 +206,14 @@ def send_bank_transfer_details_email(
     html_template = get_base_html_template(
         title="Complete Your Payment via Bank Transfer",
         preheader=f"Your dedicated account details for order #{order_ref}",
-        content=content
+        content=content,
     )
     send_email(to_email, "Complete Your Payment via Bank Transfer", html_template)
 
 
-def send_bank_transfer_expired_email(to_email: str, order_id: str, order_url: str = None):
+def send_bank_transfer_expired_email(
+    to_email: str, order_id: str, order_url: Optional[str] = None
+):
     order_ref = order_id[-6:]
     order_url = order_url or f"{settings.FRONTEND_URL}/orders/{order_id}"
     content = f"""
@@ -206,14 +226,19 @@ def send_bank_transfer_expired_email(to_email: str, order_id: str, order_url: st
     html_template = get_base_html_template(
         title="Payment Window Expired",
         preheader=f"Your payment window for order #{order_ref} has expired.",
-        content=content
+        content=content,
     )
     send_email(to_email, f"Payment Window Expired: Order #{order_ref}", html_template)
 
 
 def send_payment_confirmation_email(
-    to_email: str, order_id: str, amount: float, order_url: str = None,
-    items: list = None, shipping_info=None, created_at=None,
+    to_email: str,
+    order_id: str,
+    amount: float,
+    order_url: Optional[str] = None,
+    items: Optional[list] = None,
+    shipping_info=None,
+    created_at=None,
 ):
     order_ref = order_id[-6:]
     amount_str = f"₦{amount:,.2f}"
@@ -234,7 +259,7 @@ def send_payment_confirmation_email(
     html_template = get_base_html_template(
         title="Payment Received",
         preheader=f"We've received your payment for order #{order_ref}.",
-        content=content
+        content=content,
     )
     send_email(to_email, f"Payment Confirmed: Order #{order_ref}", html_template)
 
@@ -242,13 +267,14 @@ def send_payment_confirmation_email(
 def send_notification_email(to_email: str, title: str, message: str):
     content = f"<p>{message}</p>"
     html_template = get_base_html_template(
-        title=title,
-        preheader=title,
-        content=content
+        title=title, preheader=title, content=content
     )
     send_email(to_email, title, html_template)
 
-def send_support_ticket_email(to_email: str, ticket_id: str, subject: str, message: str, is_admin: bool = False):
+
+def send_support_ticket_email(
+    to_email: str, ticket_id: str, subject: str, message: str, is_admin: bool = False
+):
     if is_admin:
         title = f"New Support Ticket: {subject}"
         content = f"""
@@ -279,15 +305,21 @@ def send_support_ticket_email(to_email: str, ticket_id: str, subject: str, messa
                 <a href="{settings.FRONTEND_URL}/support" class="button">View Ticket</a>
             </div>
         """
-    
+
     html_template = get_base_html_template(
-        title=title,
-        preheader=title,
-        content=content
+        title=title, preheader=title, content=content
     )
     send_email(to_email, title, html_template)
 
-def send_support_reply_email(to_email: str, ticket_id: str, subject: str, reply_message: str, sender_name: str, is_admin: bool = False):
+
+def send_support_reply_email(
+    to_email: str,
+    ticket_id: str,
+    subject: str,
+    reply_message: str,
+    sender_name: str,
+    is_admin: bool = False,
+):
     if is_admin:
         title = f"New Reply to Your Support Ticket: {subject}"
         content = f"""
@@ -318,15 +350,21 @@ def send_support_reply_email(to_email: str, ticket_id: str, subject: str, reply_
                 <a href="{settings.FRONTEND_URL}/admin/support" class="button">View Ticket</a>
             </div>
         """
-    
+
     html_template = get_base_html_template(
-        title=title,
-        preheader=title,
-        content=content
+        title=title, preheader=title, content=content
     )
     send_email(to_email, title, html_template)
 
-def send_dispute_email(to_email: str, dispute_id: str, order_id: str, reason: str, description: str, is_admin: bool = False):
+
+def send_dispute_email(
+    to_email: str,
+    dispute_id: str,
+    order_id: str,
+    reason: str,
+    description: str,
+    is_admin: bool = False,
+):
     if is_admin:
         title = f"New Dispute Filed: Order #{order_id[-6:]}"
         content = f"""
@@ -359,10 +397,46 @@ def send_dispute_email(to_email: str, dispute_id: str, order_id: str, reason: st
                 <a href="{settings.FRONTEND_URL}/disputes" class="button">View Dispute</a>
             </div>
         """
-    
+
     html_template = get_base_html_template(
-        title=title,
-        preheader=title,
-        content=content
+        title=title, preheader=title, content=content
     )
     send_email(to_email, title, html_template)
+
+
+def send_announcement_message(
+    to_email: str,
+    subject: str,
+    title: str,
+    message: str,
+    is_html: bool = False,
+    unsubscribe_url: Optional[str] = None,
+):
+    """Send a short announcement email.
+
+    - If `is_html` is False the `message` will be HTML-escaped and line breaks preserved.
+    - `unsubscribe_url` if provided will be appended as a small unsubscribe link.
+    """
+    if not is_html:
+        safe_message = html_lib.escape(message).replace("\n", "<br>")
+    else:
+        safe_message = message
+
+    # Wrap in a paragraph if it doesn't look like full HTML
+    content = (
+        safe_message
+        if ("<" in safe_message and ">" in safe_message)
+        else f"<p>{safe_message}</p>"
+    )
+
+    if unsubscribe_url:
+        content += f"""
+        <p style=\"font-size:12px; color:#71717a; margin-top:24px; text-align:center;\">
+            <a href=\"{unsubscribe_url}\" style=\"color:#6b7280; text-decoration:underline;\">Unsubscribe</a>
+        </p>
+        """
+
+    html_template = get_base_html_template(
+        title=title, preheader=title, content=content
+    )
+    send_email(to_email, subject, html_template)
