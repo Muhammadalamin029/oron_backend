@@ -1,35 +1,71 @@
-import smtplib
+import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional
 import html as html_lib
 
+import aiosmtplib
+
 from core.config import settings
 
+logger = logging.getLogger(__name__)
 
-def send_email(to_email: str, subject: str, html_content: str):
-    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-        print(f"Mock email to {to_email}: {subject}")
-        return
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = f"{settings.EMAILS_FROM_NAME} <{settings.EMAILS_FROM_EMAIL}>"
-    msg["To"] = to_email
+class EmailSender:
+    def __init__(self):
+        self.smtp_host = settings.SMTP_HOST
+        self.smtp_port = settings.SMTP_PORT
+        self.username = settings.SMTP_USER
+        self.password = settings.SMTP_PASSWORD
+        self.from_email = settings.EMAILS_FROM_EMAIL
+        self.from_name = settings.EMAILS_FROM_NAME
+        # Port 465 is implicit-SSL-from-connect; everything else (587, 25)
+        # is plaintext-then-STARTTLS.
+        self.use_ssl = self.smtp_port == 465
 
-    part1 = MIMEText(html_content, "html")
-    msg.attach(part1)
+    def _create_message(self, to_email, subject, html_body, text_body=None):
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{self.from_name} <{self.from_email}>"
+        msg["To"] = to_email
+        if text_body:
+            msg.attach(MIMEText(text_body, "plain"))
+        msg.attach(MIMEText(html_body, "html"))
+        return msg
 
-    try:
-        # Explicit timeout — without it, a slow/unresponsive SMTP server hangs
-        # this call indefinitely (smtplib's default is effectively "forever").
-        server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10)
-        server.starttls()
-        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-        server.sendmail(settings.EMAILS_FROM_EMAIL, to_email, msg.as_string())
-        server.quit()
-    except Exception as e:
-        print(f"Failed to send email to {to_email}: {e}")
+    async def send_email_async(self, to_email, subject, html_body, text_body=None) -> bool:
+        if not self.username or not self.password:
+            logger.info(f"Mock email to {to_email}: {subject}")
+            return True
+
+        try:
+            msg = self._create_message(to_email, subject, html_body, text_body)
+            if self.use_ssl:
+                # Port 465 — SSL from the start
+                smtp = aiosmtplib.SMTP(hostname=self.smtp_host, port=self.smtp_port,
+                                       use_tls=True, timeout=30)
+            else:
+                # Port 587 — aiosmtplib v4 auto-performs STARTTLS on connect
+                # when the server announces it; do not call starttls() manually
+                smtp = aiosmtplib.SMTP(hostname=self.smtp_host, port=self.smtp_port,
+                                       use_tls=False, timeout=30)
+            await smtp.connect()
+            if self.username and self.password:
+                await smtp.login(self.username, self.password)
+            await smtp.send_message(msg)
+            await smtp.quit()
+            logger.info(f"Email sent to {to_email}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send email to {to_email}: {e}")
+            return False
+
+
+_sender = EmailSender()
+
+
+async def send_email(to_email: str, subject: str, html_content: str):
+    await _sender.send_email_async(to_email, subject, html_content)
 
 
 def get_base_html_template(title: str, preheader: str, content: str) -> str:
@@ -104,7 +140,7 @@ def _render_shipping_html(shipping_info) -> str:
     """
 
 
-def send_verification_email(to_email: str, token: str):
+async def send_verification_email(to_email: str, token: str):
     verify_url = f"{settings.FRONTEND_URL}/auth/verify-email?token={token}"
     content = f"""
         <p>Welcome to ORON Watch Marketplace!</p>
@@ -122,10 +158,10 @@ def send_verification_email(to_email: str, token: str):
         preheader="Confirm your email address to finish setting up your ORON account.",
         content=content,
     )
-    send_email(to_email, "Welcome to ORON! Please verify your email.", html_template)
+    await send_email(to_email, "Welcome to ORON! Please verify your email.", html_template)
 
 
-def send_verify_and_set_password_email(to_email: str, token: str):
+async def send_verify_and_set_password_email(to_email: str, token: str):
     set_password_url = f"{settings.FRONTEND_URL}/auth/set-password?token={token}"
     content = f"""
         <p>Welcome to ORON Watch Marketplace!</p>
@@ -143,14 +179,14 @@ def send_verify_and_set_password_email(to_email: str, token: str):
         preheader="You're one step from tracking your ORON order.",
         content=content,
     )
-    send_email(
+    await send_email(
         to_email,
         "Welcome to ORON! Set a password to continue your order.",
         html_template,
     )
 
 
-def send_account_access_email(to_email: str, token: str):
+async def send_account_access_email(to_email: str, token: str):
     set_password_url = f"{settings.FRONTEND_URL}/auth/set-password?token={token}"
     content = f"""
         <p>We received a request to access your ORON account.</p>
@@ -169,10 +205,10 @@ def send_account_access_email(to_email: str, token: str):
         preheader="Set a password to sign in to your ORON account.",
         content=content,
     )
-    send_email(to_email, "Access your ORON account", html_template)
+    await send_email(to_email, "Access your ORON account", html_template)
 
 
-def send_bank_transfer_details_email(
+async def send_bank_transfer_details_email(
     to_email: str,
     order_id: str,
     bank_name: str,
@@ -212,10 +248,10 @@ def send_bank_transfer_details_email(
         preheader=f"Your dedicated account details for order #{order_ref}",
         content=content,
     )
-    send_email(to_email, "Complete Your Payment via Bank Transfer", html_template)
+    await send_email(to_email, "Complete Your Payment via Bank Transfer", html_template)
 
 
-def send_bank_transfer_expired_email(
+async def send_bank_transfer_expired_email(
     to_email: str, order_id: str, order_url: Optional[str] = None
 ):
     order_ref = order_id[-6:]
@@ -232,10 +268,10 @@ def send_bank_transfer_expired_email(
         preheader=f"Your payment window for order #{order_ref} has expired.",
         content=content,
     )
-    send_email(to_email, f"Payment Window Expired: Order #{order_ref}", html_template)
+    await send_email(to_email, f"Payment Window Expired: Order #{order_ref}", html_template)
 
 
-def send_payment_confirmation_email(
+async def send_payment_confirmation_email(
     to_email: str,
     order_id: str,
     amount: float,
@@ -265,18 +301,18 @@ def send_payment_confirmation_email(
         preheader=f"We've received your payment for order #{order_ref}.",
         content=content,
     )
-    send_email(to_email, f"Payment Confirmed: Order #{order_ref}", html_template)
+    await send_email(to_email, f"Payment Confirmed: Order #{order_ref}", html_template)
 
 
-def send_notification_email(to_email: str, title: str, message: str):
+async def send_notification_email(to_email: str, title: str, message: str):
     content = f"<p>{message}</p>"
     html_template = get_base_html_template(
         title=title, preheader=title, content=content
     )
-    send_email(to_email, title, html_template)
+    await send_email(to_email, title, html_template)
 
 
-def send_support_ticket_email(
+async def send_support_ticket_email(
     to_email: str, ticket_id: str, subject: str, message: str, is_admin: bool = False
 ):
     if is_admin:
@@ -313,10 +349,10 @@ def send_support_ticket_email(
     html_template = get_base_html_template(
         title=title, preheader=title, content=content
     )
-    send_email(to_email, title, html_template)
+    await send_email(to_email, title, html_template)
 
 
-def send_support_reply_email(
+async def send_support_reply_email(
     to_email: str,
     ticket_id: str,
     subject: str,
@@ -358,10 +394,10 @@ def send_support_reply_email(
     html_template = get_base_html_template(
         title=title, preheader=title, content=content
     )
-    send_email(to_email, title, html_template)
+    await send_email(to_email, title, html_template)
 
 
-def send_dispute_email(
+async def send_dispute_email(
     to_email: str,
     dispute_id: str,
     order_id: str,
@@ -405,10 +441,10 @@ def send_dispute_email(
     html_template = get_base_html_template(
         title=title, preheader=title, content=content
     )
-    send_email(to_email, title, html_template)
+    await send_email(to_email, title, html_template)
 
 
-def send_announcement_message(
+async def send_announcement_message(
     to_email: str,
     subject: str,
     title: str,
@@ -443,4 +479,4 @@ def send_announcement_message(
     html_template = get_base_html_template(
         title=title, preheader=title, content=content
     )
-    send_email(to_email, subject, html_template)
+    await send_email(to_email, subject, html_template)

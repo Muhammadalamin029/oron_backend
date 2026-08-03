@@ -19,14 +19,12 @@ def create_notification(db: Session, notification: schemas.NotificationCreate, b
     db.commit()
     db.refresh(db_notif)
     
-    # Fire off email
+    # Fire off email — send_notification_email is async, so this needs a
+    # BackgroundTasks instance to run; every real call site provides one.
     user = db.query(models.User).filter(models.User.id == notification.user_id).first()
     if user and background_tasks:
         background_tasks.add_task(send_notification_email, user.email, notification.title, notification.message)
-    elif user and not background_tasks:
-        # fallback to sync
-        send_notification_email(user.email, notification.title, notification.message)
-        
+
     return db_notif
 
 def get_user_notifications(db: Session, user_id: str, skip: int = 0, limit: int = 100):
@@ -155,17 +153,11 @@ def trigger_product_notifications(db: Session, product: models.Product, backgrou
                 background_tasks
             )
 
-    if rule.notify_newsletter:
+    if rule.notify_newsletter and background_tasks:
         subscribers = db.query(models.NewsletterSubscriber).all()
         for subscriber in subscribers:
             unsubscribe_url = f"{settings.FRONTEND_URL}/unsubscribe?email={quote(subscriber.email)}"
-            if background_tasks:
-                background_tasks.add_task(
-                    send_announcement_message, subscriber.email, title, title, message,
-                    unsubscribe_url=unsubscribe_url
-                )
-            else:
-                send_announcement_message(
-                    subscriber.email, title, title, message,
-                    unsubscribe_url=unsubscribe_url
-                )
+            background_tasks.add_task(
+                send_announcement_message, subscriber.email, title, title, message,
+                unsubscribe_url=unsubscribe_url
+            )

@@ -23,7 +23,7 @@ class BroadcastRequest(BaseModel):
     is_html: bool = False
 
 
-def _dispatch_broadcast_emails(
+async def _dispatch_broadcast_emails(
     recipients: list[str], subject: str, title: str, message: str, is_html: bool
 ):
     """Actually sends the emails. Runs as a background task, off the request
@@ -32,7 +32,7 @@ def _dispatch_broadcast_emails(
     email finished sending (or the connection timed out)."""
     for email in recipients:
         unsubscribe_url = f"{settings.FRONTEND_URL}/unsubscribe?email={quote(email)}"
-        send_announcement_message(
+        await send_announcement_message(
             to_email=email,
             subject=subject,
             title=title,
