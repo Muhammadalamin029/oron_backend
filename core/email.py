@@ -1,62 +1,57 @@
 import logging
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from typing import Optional
 import html as html_lib
 
-import aiosmtplib
+import httpx
 
 from core.config import settings
 
 logger = logging.getLogger(__name__)
 
+BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
+
 
 class EmailSender:
+    """Sends via Brevo's HTTP API (port 443) rather than raw SMTP — hosts
+    like Render block or silently drop outbound SMTP ports (25/465/587),
+    but HTTPS always works, so this sidesteps that class of failure entirely."""
+
     def __init__(self):
-        self.smtp_host = settings.SMTP_HOST
-        self.smtp_port = settings.SMTP_PORT
-        self.username = settings.SMTP_USER
-        self.password = settings.SMTP_PASSWORD
+        self.api_key = settings.BREVO_API_KEY
         self.from_email = settings.EMAILS_FROM_EMAIL
         self.from_name = settings.EMAILS_FROM_NAME
-        # Port 465 is implicit-SSL-from-connect; everything else (587, 25)
-        # is plaintext-then-STARTTLS.
-        self.use_ssl = self.smtp_port == 465
-
-    def _create_message(self, to_email, subject, html_body, text_body=None):
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"] = f"{self.from_name} <{self.from_email}>"
-        msg["To"] = to_email
-        if text_body:
-            msg.attach(MIMEText(text_body, "plain"))
-        msg.attach(MIMEText(html_body, "html"))
-        return msg
 
     async def send_email_async(self, to_email, subject, html_body, text_body=None) -> bool:
-        if not self.username or not self.password:
+        if not self.api_key:
             logger.info(f"Mock email to {to_email}: {subject}")
             return True
 
+        payload = {
+            "sender": {"name": self.from_name, "email": self.from_email},
+            "to": [{"email": to_email}],
+            "subject": subject,
+            "htmlContent": html_body,
+        }
+        if text_body:
+            payload["textContent"] = text_body
+
+        headers = {
+            "accept": "application/json",
+            "api-key": self.api_key,
+            "content-type": "application/json",
+        }
+
         try:
-            msg = self._create_message(to_email, subject, html_body, text_body)
-            if self.use_ssl:
-                # Port 465 — SSL from the start
-                smtp = aiosmtplib.SMTP(hostname=self.smtp_host, port=self.smtp_port,
-                                       use_tls=True, timeout=30)
-            else:
-                # Port 587 — aiosmtplib v4 auto-performs STARTTLS on connect
-                # when the server announces it; do not call starttls() manually
-                smtp = aiosmtplib.SMTP(hostname=self.smtp_host, port=self.smtp_port,
-                                       use_tls=False, timeout=30)
-            await smtp.connect()
-            if self.username and self.password:
-                await smtp.login(self.username, self.password)
-            await smtp.send_message(msg)
-            await smtp.quit()
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.post(BREVO_API_URL, json=payload, headers=headers)
+            if response.status_code >= 400:
+                logger.error(
+                    f"Failed to send email to {to_email}: Brevo API {response.status_code} {response.text}"
+                )
+                return False
             logger.info(f"Email sent to {to_email}")
             return True
-        except Exception as e:
+        except httpx.RequestError as e:
             logger.error(f"Failed to send email to {to_email}: {e}")
             return False
 

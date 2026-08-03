@@ -14,11 +14,9 @@ class Settings:
     # Frontend (for CORS + links)
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
     
-    # Email settings
-    SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp-relay.brevo.com")
-    SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
-    SMTP_USER: str = os.getenv("SMTP_USER", "")
-    SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
+    # Email settings — sent via Brevo's HTTP API (not raw SMTP), since hosts
+    # like Render block/drop outbound SMTP ports but always allow HTTPS.
+    BREVO_API_KEY: str = os.getenv("BREVO_API_KEY", "")
     EMAILS_FROM_EMAIL: str = os.getenv("EMAILS_FROM_EMAIL", "noreply@oron.com")
     EMAILS_FROM_NAME: str = "ORON Watch Marketplace"
     
