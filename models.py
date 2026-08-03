@@ -93,6 +93,26 @@ class Product(Base):
     reviews = relationship(
         "Review", back_populates="product", cascade="all, delete-orphan"
     )
+    images = relationship(
+        "ProductImage",
+        back_populates="product",
+        cascade="all, delete-orphan",
+        order_by="ProductImage.position",
+    )
+
+
+class ProductImage(Base):
+    __tablename__ = "product_images"
+
+    id = Column(String, primary_key=True, index=True)
+    product_id = Column(
+        String, ForeignKey("products.id", ondelete="CASCADE"), nullable=False
+    )
+    image_url = Column(Text, nullable=False)
+    position = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    product = relationship("Product", back_populates="images")
 
 
 class Order(Base):

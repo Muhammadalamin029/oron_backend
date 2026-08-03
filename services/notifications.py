@@ -5,7 +5,7 @@ from fastapi import BackgroundTasks
 import models
 import schemas
 from core.config import settings
-from core.email import send_notification_email, send_announcement_message
+from core.email import send_notification_email, send_new_product_email
 
 def create_notification(db: Session, notification: schemas.NotificationCreate, background_tasks: BackgroundTasks = None):
     db_notif = models.Notification(
@@ -142,6 +142,9 @@ def trigger_product_notifications(db: Session, product: models.Product, backgrou
     if rule.notify_customers:
         customers = db.query(models.User).filter(models.User.is_admin == False, models.User.is_active == True).all()
         for customer in customers:
+            # In-app notification only here — the email itself is the richer
+            # product announcement sent separately below, so we don't pass
+            # background_tasks (which would also fire the generic text email).
             create_notification(
                 db,
                 schemas.NotificationCreate(
@@ -150,14 +153,29 @@ def trigger_product_notifications(db: Session, product: models.Product, backgrou
                     message=message,
                     type="product"
                 ),
-                background_tasks
             )
+            if background_tasks:
+                background_tasks.add_task(
+                    send_new_product_email,
+                    customer.email,
+                    product.id,
+                    product.name,
+                    product.description,
+                    product.price,
+                    image_url=product.image_url or None,
+                )
 
     if rule.notify_newsletter and background_tasks:
         subscribers = db.query(models.NewsletterSubscriber).all()
         for subscriber in subscribers:
             unsubscribe_url = f"{settings.FRONTEND_URL}/unsubscribe?email={quote(subscriber.email)}"
             background_tasks.add_task(
-                send_announcement_message, subscriber.email, title, title, message,
-                unsubscribe_url=unsubscribe_url
+                send_new_product_email,
+                subscriber.email,
+                product.id,
+                product.name,
+                product.description,
+                product.price,
+                image_url=product.image_url or None,
+                unsubscribe_url=unsubscribe_url,
             )

@@ -135,6 +135,36 @@ def _render_shipping_html(shipping_info) -> str:
     """
 
 
+def _render_product_details_html(
+    name: str, price: Optional[float], description: str, image_url: Optional[str]
+) -> str:
+    image_html = ""
+    if image_url:
+        image_html = f"""
+        <div style="text-align: center; margin-bottom: 20px;">
+            <img src="{image_url}" alt="{html_lib.escape(name)}" style="max-width: 100%; width: 280px; border-radius: 8px; border: 1px solid #353534;">
+        </div>
+        """
+    price_html = (
+        f'<p style="margin: 4px 0 0 0; color: #ff6b00; font-weight: 700; font-size: 18px;">₦{price:,.2f}</p>'
+        if price is not None
+        else ""
+    )
+    description_html = (
+        f'<p style="margin: 8px 0 0 0; color: #9a9898;">{html_lib.escape(description)}</p>'
+        if description
+        else ""
+    )
+    return f"""
+        <div style="background-color: #1c1b1b; border: 1px solid #353534; padding: 20px; border-radius: 6px; margin: 20px 0;">
+            {image_html}
+            <p style="margin: 0; color: #ffffff; font-size: 18px; font-weight: 700;">{html_lib.escape(name)}</p>
+            {price_html}
+            {description_html}
+        </div>
+    """
+
+
 async def send_verification_email(to_email: str, token: str):
     verify_url = f"{settings.FRONTEND_URL}/auth/verify-email?token={token}"
     content = f"""
@@ -475,3 +505,38 @@ async def send_announcement_message(
         title=title, preheader=title, content=content
     )
     await send_email(to_email, subject, html_template)
+
+
+async def send_new_product_email(
+    to_email: str,
+    product_id: str,
+    name: str,
+    description: str,
+    price: float,
+    image_url: Optional[str] = None,
+    unsubscribe_url: Optional[str] = None,
+):
+    """Announce a newly-created product, with its picture and details, to a
+    customer or newsletter subscriber."""
+    product_url = f"{settings.FRONTEND_URL}/products/{product_id}"
+    content = f"""
+        <p>Check out our newest addition to the ORON collection:</p>
+        {_render_product_details_html(name, price, description, image_url)}
+        <div style="text-align: center;">
+            <a href="{product_url}" class="button">View Product</a>
+        </div>
+    """
+
+    if unsubscribe_url:
+        content += f"""
+        <p style=\"font-size:12px; color:#9a9898; margin-top:24px; text-align:center;\">
+            <a href=\"{unsubscribe_url}\" style=\"color:#9a9898; text-decoration:underline;\">Unsubscribe</a>
+        </p>
+        """
+
+    html_template = get_base_html_template(
+        title="New Product Available",
+        preheader=f"Check out {name}, now available at ORON.",
+        content=content,
+    )
+    await send_email(to_email, f"New Arrival: {name}", html_template)

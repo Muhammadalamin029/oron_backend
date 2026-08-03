@@ -1,12 +1,12 @@
 import uuid
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from fastapi import HTTPException
 from sqlalchemy import or_
 import models
 import schemas
 
 def get_product(db: Session, product_id: str):
-    return db.query(models.Product).options(joinedload(models.Product.category)).filter(models.Product.id == product_id).first()
+    return db.query(models.Product).options(joinedload(models.Product.category), selectinload(models.Product.images)).filter(models.Product.id == product_id).first()
 
 def get_products(
     db: Session,
@@ -18,7 +18,7 @@ def get_products(
     sort_by: str | None = None,
     sort_order: str = "desc",
 ):
-    query = db.query(models.Product).options(joinedload(models.Product.category))
+    query = db.query(models.Product).options(joinedload(models.Product.category), selectinload(models.Product.images))
 
     if category:
         query = query.join(models.Product.category).filter(models.Category.name == category)
@@ -54,17 +54,30 @@ def get_products(
     return query.offset(skip).limit(limit).all()
 
 def create_product(db: Session, product: schemas.ProductCreate):
+    images = list(product.images) if product.images else ([product.image_url] if product.image_url else [])
+    primary_image = images[0] if images else ""
+
     db_product = models.Product(
         id=str(uuid.uuid4()),
         name=product.name,
         description=product.description,
         price=product.price,
-        image_url=product.image_url,
+        image_url=primary_image,
         category_id=product.category_id,
         stock=product.stock,
         is_active=product.is_active
     )
     db.add(db_product)
+    db.flush()
+
+    for position, image_url in enumerate(images):
+        db.add(models.ProductImage(
+            id=str(uuid.uuid4()),
+            product_id=db_product.id,
+            image_url=image_url,
+            position=position,
+        ))
+
     db.commit()
     db.refresh(db_product)
     return db_product
@@ -73,11 +86,22 @@ def update_product(db: Session, product_id: str, product_update: schemas.Product
     db_product = get_product(db, product_id)
     if not db_product:
         raise HTTPException(status_code=404, detail="Product not found")
-        
+
     update_data = product_update.model_dump(exclude_unset=True)
+    images = update_data.pop("images", None)
     for key, value in update_data.items():
         setattr(db_product, key, value)
-        
+
+    if images is not None:
+        db_product.images.clear()
+        for position, image_url in enumerate(images):
+            db_product.images.append(models.ProductImage(
+                id=str(uuid.uuid4()),
+                image_url=image_url,
+                position=position,
+            ))
+        db_product.image_url = images[0] if images else ""
+
     db.commit()
     db.refresh(db_product)
     return db_product

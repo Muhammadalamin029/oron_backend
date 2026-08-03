@@ -149,6 +149,12 @@ class CategoryWithCount(Category):
 
 
 # Product schemas
+class ProductImageOut(BaseSchema):
+    id: str
+    image_url: str
+    position: int = 0
+
+
 class ProductBase(BaseSchema):
     name: str
     description: str = ""
@@ -160,6 +166,16 @@ class ProductBase(BaseSchema):
 
 class ProductCreate(ProductBase):
     category_id: str
+    # Additional images beyond the primary `image_url`. The first entry of
+    # `images` (if provided) becomes the primary `image_url` when set.
+    images: List[str] = []
+
+    @field_validator("images")
+    @classmethod
+    def limit_image_count(cls, value: List[str]) -> List[str]:
+        if len(value) > 10:
+            raise ValueError("A product can have at most 10 images")
+        return value
 
 
 class ProductUpdate(BaseSchema):
@@ -170,6 +186,8 @@ class ProductUpdate(BaseSchema):
     category_id: Optional[str] = None
     stock: Optional[int] = None
     is_active: Optional[bool] = None
+    # When provided, replaces the full set of product images.
+    images: Optional[List[str]] = None
 
 
 class Product(ProductBase):
@@ -178,6 +196,7 @@ class Product(ProductBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
     category: Category
+    images: List[ProductImageOut] = []
 
 
 # Order schemas
