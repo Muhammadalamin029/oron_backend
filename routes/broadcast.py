@@ -1,11 +1,12 @@
-from typing import Optional
+from urllib.parse import quote
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
 import models
+from core.config import settings
 from core.email import send_announcement_message
 from database.dependencies import get_admin_user, get_db
 
@@ -20,12 +21,31 @@ class BroadcastRequest(BaseModel):
     include_newsletter: bool = False
     custom_recipients: list[EmailStr] = Field(default_factory=list)
     is_html: bool = False
-    unsubscribe_url: Optional[str] = None
+
+
+def _dispatch_broadcast_emails(
+    recipients: list[str], subject: str, title: str, message: str, is_html: bool
+):
+    """Actually sends the emails. Runs as a background task, off the request
+    thread — this loop opens a real SMTP connection per recipient, so running
+    it inline in the request handler would hang the HTTP response until every
+    email finished sending (or the connection timed out)."""
+    for email in recipients:
+        unsubscribe_url = f"{settings.FRONTEND_URL}/unsubscribe?email={quote(email)}"
+        send_announcement_message(
+            to_email=email,
+            subject=subject,
+            title=title,
+            message=message,
+            is_html=is_html,
+            unsubscribe_url=unsubscribe_url,
+        )
 
 
 @router.post("/")
 def send_messages(
     payload: BroadcastRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     admin_user: models.User = Depends(get_admin_user),
 ):
@@ -54,16 +74,6 @@ def send_messages(
                 status_code=400, detail="No recipients selected for broadcast."
             )
 
-        for email in recipients:
-            send_announcement_message(
-                to_email=email,
-                subject=payload.subject,
-                title=payload.title,
-                message=payload.message,
-                is_html=payload.is_html,
-                unsubscribe_url=payload.unsubscribe_url,
-            )
-
         saved_message = models.BroadcastMessage(
             id=str(uuid4()),
             sent_by_admin_id=admin_user.id,
@@ -79,6 +89,15 @@ def send_messages(
         db.add(saved_message)
         db.commit()
         db.refresh(saved_message)
+
+        background_tasks.add_task(
+            _dispatch_broadcast_emails,
+            recipients,
+            payload.subject,
+            payload.title,
+            payload.message,
+            payload.is_html,
+        )
 
         return {
             "status": "ok",

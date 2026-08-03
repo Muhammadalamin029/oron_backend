@@ -35,6 +35,28 @@ def subscribe(
     return {"status": "ok", "detail": "You're on the list!"}
 
 
+@router.post("/unsubscribe")
+def unsubscribe(
+    payload: SubscribeRequest,
+    db: Session = Depends(get_db),
+):
+    email = str(payload.email).strip().lower()
+
+    subscriber = (
+        db.query(models.NewsletterSubscriber)
+        .filter(models.NewsletterSubscriber.email == email)
+        .first()
+    )
+    if subscriber:
+        db.delete(subscriber)
+        db.commit()
+
+    # Always report success — whether or not this email was actually
+    # subscribed, the end state the visitor wants (not receiving further
+    # emails) is now true, and this avoids leaking subscription status.
+    return {"status": "ok", "detail": "You have been unsubscribed."}
+
+
 @router.get("/")
 def list_subscribers(
     db: Session = Depends(get_db),

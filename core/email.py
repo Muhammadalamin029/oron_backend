@@ -21,7 +21,9 @@ def send_email(to_email: str, subject: str, html_content: str):
     msg.attach(part1)
 
     try:
-        server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT)
+        # Explicit timeout — without it, a slow/unresponsive SMTP server hangs
+        # this call indefinitely (smtplib's default is effectively "forever").
+        server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10)
         server.starttls()
         server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
         server.sendmail(settings.EMAILS_FROM_EMAIL, to_email, msg.as_string())

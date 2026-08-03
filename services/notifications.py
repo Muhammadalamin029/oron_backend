@@ -1,8 +1,10 @@
 import uuid
+from urllib.parse import quote
 from sqlalchemy.orm import Session
 from fastapi import BackgroundTasks
 import models
 import schemas
+from core.config import settings
 from core.email import send_notification_email, send_announcement_message
 
 def create_notification(db: Session, notification: schemas.NotificationCreate, background_tasks: BackgroundTasks = None):
@@ -156,7 +158,14 @@ def trigger_product_notifications(db: Session, product: models.Product, backgrou
     if rule.notify_newsletter:
         subscribers = db.query(models.NewsletterSubscriber).all()
         for subscriber in subscribers:
+            unsubscribe_url = f"{settings.FRONTEND_URL}/unsubscribe?email={quote(subscriber.email)}"
             if background_tasks:
-                background_tasks.add_task(send_announcement_message, subscriber.email, title, title, message)
+                background_tasks.add_task(
+                    send_announcement_message, subscriber.email, title, title, message,
+                    unsubscribe_url=unsubscribe_url
+                )
             else:
-                send_announcement_message(subscriber.email, title, title, message)
+                send_announcement_message(
+                    subscriber.email, title, title, message,
+                    unsubscribe_url=unsubscribe_url
+                )
