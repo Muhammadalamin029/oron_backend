@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
 from schemas import ProductCreate, ProductUpdate, Product, PaginatedResponse
 from services import products as products_service
 from services.audit import log_admin_action
+from services.notifications import trigger_product_notifications
 from database.dependencies import get_db, get_admin_user
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -37,9 +38,10 @@ async def get_product(product_id: str, db: Session = Depends(get_db)):
     return product
 
 @router.post("/", response_model=Product)
-async def create_product(product_data: ProductCreate, db: Session = Depends(get_db), current_admin = Depends(get_admin_user)):
+async def create_product(product_data: ProductCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_admin = Depends(get_admin_user)):
     product = products_service.create_product(db=db, product=product_data)
     log_admin_action(db, admin_user_id=current_admin.id, action="product.create", entity_type="product", entity_id=product.id)
+    trigger_product_notifications(db, product, background_tasks)
     return product
 
 @router.patch("/{product_id}", response_model=Product)

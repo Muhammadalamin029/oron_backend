@@ -421,3 +421,12 @@ class NewsletterSubscriber(Base):
     id = Column(String, primary_key=True, index=True, default=lambda: str(uuid4()))
     email = Column(String, unique=True, index=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class NotificationRule(Base):
+    __tablename__ = "notification_rules"
+
+    action = Column(String, primary_key=True, index=True)
+    notify_customers = Column(Boolean, default=True, nullable=False)
+    notify_newsletter = Column(Boolean, default=True, nullable=False)
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from fastapi import BackgroundTasks
 import models
 import schemas
-from core.email import send_notification_email
+from core.email import send_notification_email, send_announcement_message
 
 def create_notification(db: Session, notification: schemas.NotificationCreate, background_tasks: BackgroundTasks = None):
     db_notif = models.Notification(
@@ -124,3 +124,39 @@ def trigger_dispute_notifications(db: Session, dispute: models.Dispute, backgrou
     admin_title = f"New Dispute Filed: #{dispute.order_id[-6:]}"
     admin_message = f"A new dispute has been filed for order #{dispute.order_id[-6:]} by {dispute.user.full_name if dispute.user else 'Customer'}. Reason: {dispute.reason}"
     create_admin_notification(db, admin_title, admin_message, "dispute", background_tasks)
+
+def trigger_product_notifications(db: Session, product: models.Product, background_tasks: BackgroundTasks = None):
+    """Trigger notifications for a newly-created product, gated by the master
+    switch (SiteSetting.enable_notifications) and the per-action NotificationRule."""
+    master_switch = db.query(models.SiteSetting).filter(models.SiteSetting.key == "enable_notifications").first()
+    if master_switch is not None and master_switch.value == "false":
+        return
+
+    rule = db.query(models.NotificationRule).filter(models.NotificationRule.action == "new_product").first()
+    if rule is None:
+        return
+
+    title = "New Product Available"
+    message = f"Check out our newest addition: {product.name}."
+
+    if rule.notify_customers:
+        customers = db.query(models.User).filter(models.User.is_admin == False, models.User.is_active == True).all()
+        for customer in customers:
+            create_notification(
+                db,
+                schemas.NotificationCreate(
+                    user_id=customer.id,
+                    title=title,
+                    message=message,
+                    type="product"
+                ),
+                background_tasks
+            )
+
+    if rule.notify_newsletter:
+        subscribers = db.query(models.NewsletterSubscriber).all()
+        for subscriber in subscribers:
+            if background_tasks:
+                background_tasks.add_task(send_announcement_message, subscriber.email, title, title, message)
+            else:
+                send_announcement_message(subscriber.email, title, title, message)

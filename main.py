@@ -23,9 +23,10 @@ from routes import (
     payment_links,
     broadcast,
     newsletter,
+    notification_rules,
 )
 from database.database import SessionLocal
-from utils.bootstrapping import preseed_settings, preseed_admin
+from utils.bootstrapping import preseed_settings, preseed_admin, preseed_notification_rules
 from core.config import settings as app_settings
 
 app = FastAPI(
@@ -45,6 +46,7 @@ db = SessionLocal()
 try:
     preseed_settings(db)
     preseed_admin(db)
+    preseed_notification_rules(db)
 finally:
     db.close()
 
@@ -76,6 +78,7 @@ app.include_router(checkout.router)
 app.include_router(payment_links.router)
 app.include_router(broadcast.router)
 app.include_router(newsletter.router)
+app.include_router(notification_rules.router)
 
 
 @app.get("/")

@@ -50,6 +50,26 @@ def preseed_settings(db: Session):
             )
             print(f"Pre-seeded setting: {setting['key']}")
 
+def preseed_notification_rules(db: Session):
+    """
+    Initializes default admin-configurable notification rules if they don't exist.
+    """
+    existing = (
+        db.query(models.NotificationRule)
+        .filter(models.NotificationRule.action == "new_product")
+        .first()
+    )
+    if not existing:
+        db.add(
+            models.NotificationRule(
+                action="new_product",
+                notify_customers=True,
+                notify_newsletter=True,
+            )
+        )
+        db.commit()
+        print("Pre-seeded notification rule: new_product")
+
 def preseed_admin(db: Session):
     """
     Optionally creates an initial admin user from env vars.
