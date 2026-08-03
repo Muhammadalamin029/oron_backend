@@ -38,24 +38,26 @@ def get_base_html_template(title: str, preheader: str, content: str) -> str:
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-            body {{ font-family: 'Inter', Helvetica, Arial, sans-serif; background-color: #f4f4f5; margin: 0; padding: 0; }}
-            .container {{ max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }}
-            .header {{ background-color: #09090b; padding: 24px; text-align: center; }}
-            .header h1 {{ color: #ffffff; margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.025em; font-family: serif; }}
-            .content {{ padding: 32px; color: #3f3f46; line-height: 1.6; font-size: 16px; }}
-            .footer {{ background-color: #fafafa; padding: 24px; text-align: center; color: #71717a; font-size: 14px; border-top: 1px solid #e4e4e7; }}
-            .button {{ display: inline-block; padding: 12px 24px; background-color: #09090b; color: #ffffff !important; text-decoration: none; border-radius: 6px; font-weight: 500; margin-top: 24px; }}
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background-color: #0e0e0e; margin: 0; padding: 0; }}
+            .container {{ max-width: 600px; margin: 40px auto; background: #111111; border: 1px solid #353534; border-radius: 8px; overflow: hidden; }}
+            .header {{ background-color: #131313; padding: 28px 24px; text-align: center; border-bottom: 2px solid #ff6b00; }}
+            .header h1 {{ color: #ffffff; margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.2em; }}
+            .header h1 span {{ color: #ff6b00; }}
+            .content {{ padding: 32px; color: #e5e2e1; line-height: 1.6; font-size: 16px; }}
+            .footer {{ background-color: #0e0e0e; padding: 24px; text-align: center; color: #9a9898; font-size: 13px; border-top: 1px solid #353534; }}
+            .button {{ display: inline-block; padding: 14px 28px; background-color: #ff6b00; color: #ffffff !important; text-decoration: none; border-radius: 6px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; font-size: 13px; margin-top: 24px; }}
             .preheader {{ display: none; max-height: 0px; overflow: hidden; }}
+            a {{ color: #ff6b00; }}
         </style>
     </head>
     <body>
         <div class="preheader">{preheader}</div>
         <div class="container">
             <div class="header">
-                <h1>ORON</h1>
+                <h1>ORON <span>TECHWARE</span></h1>
             </div>
             <div class="content">
-                <h2 style="color: #09090b; margin-top: 0;">{title}</h2>
+                <h2 style="color: #ffffff; margin-top: 0;">{title}</h2>
                 {content}
             </div>
             <div class="footer">
@@ -74,8 +76,8 @@ def _render_order_items_html(items: list) -> str:
         return ""
     rows = "".join(f"""
         <tr>
-            <td style="padding: 8px 0; border-bottom: 1px solid #e4e4e7;">{item['name']} &times; {item['quantity']}</td>
-            <td style="padding: 8px 0; border-bottom: 1px solid #e4e4e7; text-align: right;">₦{item['price'] * item['quantity']:,.2f}</td>
+            <td style="padding: 8px 0; border-bottom: 1px solid #353534;">{item['name']} &times; {item['quantity']}</td>
+            <td style="padding: 8px 0; border-bottom: 1px solid #353534; text-align: right;">₦{item['price'] * item['quantity']:,.2f}</td>
         </tr>""" for item in items)
     return f"""
         <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
@@ -92,7 +94,7 @@ def _render_shipping_html(shipping_info) -> str:
     return f"""
         <div style="margin: 20px 0;">
             <p style="margin: 0 0 4px 0;"><strong>Shipping to:</strong></p>
-            <p style="margin: 0; color: #52525b;">
+            <p style="margin: 0; color: #9a9898;">
                 {name}{f" &middot; {shipping_info['phone']}" if shipping_info.get('phone') else ""}<br>
                 {shipping_info.get('address', '')}, {shipping_info.get('city', '')} {shipping_info.get('state', '')}
             </p>
@@ -108,9 +110,9 @@ def send_verification_email(to_email: str, token: str):
         <div style="text-align: center;">
             <a href="{verify_url}" class="button">Verify My Email</a>
         </div>
-        <p style="margin-top: 32px; font-size: 14px; color: #71717a;">
+        <p style="margin-top: 32px; font-size: 14px; color: #9a9898;">
             Or copy and paste this link into your browser:<br>
-            <a href="{verify_url}" style="color: #3b82f6;">{verify_url}</a>
+            <a href="{verify_url}" style="color: #ff6b00;">{verify_url}</a>
         </p>
     """
     html_template = get_base_html_template(
@@ -129,9 +131,9 @@ def send_verify_and_set_password_email(to_email: str, token: str):
         <div style="text-align: center;">
             <a href="{set_password_url}" class="button">Set My Password</a>
         </div>
-        <p style="margin-top: 32px; font-size: 14px; color: #71717a;">
+        <p style="margin-top: 32px; font-size: 14px; color: #9a9898;">
             Or copy and paste this link into your browser:<br>
-            <a href="{set_password_url}" style="color: #3b82f6;">{set_password_url}</a>
+            <a href="{set_password_url}" style="color: #ff6b00;">{set_password_url}</a>
         </p>
     """
     html_template = get_base_html_template(
@@ -154,11 +156,11 @@ def send_account_access_email(to_email: str, token: str):
         <div style="text-align: center;">
             <a href="{set_password_url}" class="button">Set My Password</a>
         </div>
-        <p style="margin-top: 32px; font-size: 14px; color: #71717a;">
+        <p style="margin-top: 32px; font-size: 14px; color: #9a9898;">
             Or copy and paste this link into your browser:<br>
-            <a href="{set_password_url}" style="color: #3b82f6;">{set_password_url}</a>
+            <a href="{set_password_url}" style="color: #ff6b00;">{set_password_url}</a>
         </p>
-        <p style="margin-top: 24px; font-size: 13px; color: #71717a;">This link expires in 48 hours.</p>
+        <p style="margin-top: 24px; font-size: 13px; color: #9a9898;">This link expires in 48 hours.</p>
     """
     html_template = get_base_html_template(
         title="Access Your ORON Account",
@@ -190,7 +192,7 @@ def send_bank_transfer_details_email(
     date_str = created_at.strftime("%d %b %Y") if created_at else None
     content = f"""
         <p>Complete your payment for order #{order_ref}{f" (placed {date_str})" if date_str else ""} by making a bank transfer for the exact amount below to the dedicated account number provided.</p>
-        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+        <div style="background-color: #1c1b1b; border: 1px solid #353534; padding: 15px; border-radius: 6px; margin: 20px 0;">
             <p><strong>Bank:</strong> {bank_name or 'N/A'}</p>
             <p><strong>Account Number:</strong> {account_number or 'N/A'}</p>
             <p><strong>Account Name:</strong> {account_name or 'N/A'}</p>
@@ -246,8 +248,8 @@ def send_payment_confirmation_email(
     date_str = created_at.strftime("%d %b %Y") if created_at else None
     content = f"""
         <p>We've received your payment for order #{order_ref}{f" (placed {date_str})" if date_str else ""}. Thank you for shopping with ORON!</p>
-        <div style="background-color: #f0fdf4; padding: 15px; border-radius: 5px; margin: 20px 0; border: 1px solid #bbf7d0;">
-            <p style="margin: 0; color: #166534;"><strong>Amount Paid:</strong> {amount_str}</p>
+        <div style="background-color: rgba(74,222,128,0.08); padding: 15px; border-radius: 6px; margin: 20px 0; border: 1px solid rgba(74,222,128,0.3);">
+            <p style="margin: 0; color: #4ade80;"><strong>Amount Paid:</strong> {amount_str}</p>
         </div>
         {f'<p style="margin-top: 24px;"><strong>Order Summary</strong></p>{_render_order_items_html(items)}' if items else ""}
         {_render_shipping_html(shipping_info)}
@@ -279,7 +281,7 @@ def send_support_ticket_email(
         title = f"New Support Ticket: {subject}"
         content = f"""
             <p>A new support ticket has been created:</p>
-            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <div style="background-color: #1c1b1b; border: 1px solid #353534; padding: 15px; border-radius: 6px; margin: 20px 0;">
                 <p><strong>Ticket ID:</strong> {ticket_id}</p>
                 <p><strong>Subject:</strong> {subject}</p>
                 <p><strong>Message:</strong></p>
@@ -294,7 +296,7 @@ def send_support_ticket_email(
         title = f"Support Ticket Created: {subject}"
         content = f"""
             <p>Thank you for contacting ORON support! Your ticket has been created.</p>
-            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <div style="background-color: #1c1b1b; border: 1px solid #353534; padding: 15px; border-radius: 6px; margin: 20px 0;">
                 <p><strong>Ticket ID:</strong> {ticket_id}</p>
                 <p><strong>Subject:</strong> {subject}</p>
                 <p><strong>Message:</strong></p>
@@ -324,7 +326,7 @@ def send_support_reply_email(
         title = f"New Reply to Your Support Ticket: {subject}"
         content = f"""
             <p>You have received a reply to your support ticket from our team:</p>
-            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <div style="background-color: #1c1b1b; border: 1px solid #353534; padding: 15px; border-radius: 6px; margin: 20px 0;">
                 <p><strong>Ticket ID:</strong> {ticket_id}</p>
                 <p><strong>From:</strong> {sender_name}</p>
                 <p><strong>Reply:</strong></p>
@@ -339,7 +341,7 @@ def send_support_reply_email(
         title = f"Customer Reply to Support Ticket: {subject}"
         content = f"""
             <p>The customer has replied to the support ticket:</p>
-            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <div style="background-color: #1c1b1b; border: 1px solid #353534; padding: 15px; border-radius: 6px; margin: 20px 0;">
                 <p><strong>Ticket ID:</strong> {ticket_id}</p>
                 <p><strong>From:</strong> {sender_name}</p>
                 <p><strong>Reply:</strong></p>
@@ -369,7 +371,7 @@ def send_dispute_email(
         title = f"New Dispute Filed: Order #{order_id[-6:]}"
         content = f"""
             <p>A new dispute has been filed for an order:</p>
-            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <div style="background-color: #1c1b1b; border: 1px solid #353534; padding: 15px; border-radius: 6px; margin: 20px 0;">
                 <p><strong>Dispute ID:</strong> {dispute_id}</p>
                 <p><strong>Order ID:</strong> #{order_id[-6:]}</p>
                 <p><strong>Reason:</strong> {reason}</p>
@@ -385,7 +387,7 @@ def send_dispute_email(
         title = f"Dispute Filed: Order #{order_id[-6:]}"
         content = f"""
             <p>Your dispute has been successfully filed and is now under review.</p>
-            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <div style="background-color: #1c1b1b; border: 1px solid #353534; padding: 15px; border-radius: 6px; margin: 20px 0;">
                 <p><strong>Dispute ID:</strong> {dispute_id}</p>
                 <p><strong>Order ID:</strong> #{order_id[-6:]}</p>
                 <p><strong>Reason:</strong> {reason}</p>
@@ -431,8 +433,8 @@ def send_announcement_message(
 
     if unsubscribe_url:
         content += f"""
-        <p style=\"font-size:12px; color:#71717a; margin-top:24px; text-align:center;\">
-            <a href=\"{unsubscribe_url}\" style=\"color:#6b7280; text-decoration:underline;\">Unsubscribe</a>
+        <p style=\"font-size:12px; color:#9a9898; margin-top:24px; text-align:center;\">
+            <a href=\"{unsubscribe_url}\" style=\"color:#9a9898; text-decoration:underline;\">Unsubscribe</a>
         </p>
         """
 
